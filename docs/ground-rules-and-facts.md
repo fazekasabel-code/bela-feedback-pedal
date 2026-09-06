@@ -5,6 +5,16 @@
 **Owner:** Abel Fazekas · **Status:** pre-bring-up, drafted 2026-09-05
 **Purpose of this doc:** the shared, stable reference every later decision and every agent session is checked against. Facts here are either measured, cited, or explicitly marked as assumptions to be tested. Nothing downstream should silently contradict it.
 
+
+> **Amendment, 2026-09-06 — the platform changed.** The Bela cannot be connected, so gen1
+> is being built first on a **Mac host with a Focusrite Scarlett 8i6**. The physics (§5),
+> the DSP architecture (§6), the jump analysis (§7), the control-surface reasoning (§8) and
+> the proxy metrics (§9) are platform-independent and stand unchanged. The parts that are
+> platform-specific are amended in place: **§3.3** (the Mac rig's hardware facts) and
+> **§4.6** (the fail-safe on a rig with no volume pedal at heel). The sequence of work now
+> lives in [`mac-rig-plan.md`](mac-rig-plan.md); [`phase-plan.md`](phase-plan.md) is the
+> Bela plan, kept for when the board comes back.
+
 ---
 
 ## 1. What gen1 is
@@ -108,6 +118,35 @@ At stage volume, the amp's acoustic output excites the guitar body and strings d
 | Expression pedal (passive) | On hand | Pot value and TRS wiring convention to be identified — see §4.3 |
 | Guitar | On hand | Which instrument, which tuning, which pickup — all affect the partial map |
 
+
+### 3.3 Mac + Scarlett 8i6 rig (the current platform)
+
+The rig gen1 is actually being built on until the Bela is connectable.
+
+| | |
+|---|---|
+| Host | Mac (Apple silicon), CoreAudio |
+| Interface | Focusrite Scarlett 8i6 — reported by CoreAudio as 10 in / 6 out, 48 kHz |
+| Guitar in | **Input 1**, INST / Hi-Z. This satisfies §4.1 in hardware — no external buffer needed |
+| Exciter out | **Outputs 3/4** → power amp → exciter on the guitar body |
+| Block size | 128 frames @ 48 kHz = 2.67 ms, to be confirmed by xrun measurement |
+| Round-trip latency | **Unmeasured.** Expect 5–15 ms, an order of magnitude worse than Bela. Measure electrically by patching an output back to an input. It sets the spacing of the phase-condition comb, and it tightens the §7 jump budget |
+| Analog I/O | **None.** No expression-pedal input. Regulation depth is a MIDI CC or a key until the Bela returns |
+| DSP | Python 3 + `sounddevice` + NumPy/SciPy, in the audio callback. Cell gains updated per block and one-pole smoothed, which sits inside the 1–5 ms attack budget of §6.3 |
+
+Two facts about this interface that are load-bearing and must be verified on the actual
+unit, not assumed:
+
+1. **Outputs 3/4 are fixed-level line outputs.** The front-panel monitor knob is believed
+   to attenuate outputs 1/2 only, which would mean it is *not* a kill switch for the
+   exciter. Verify before relying on it either way.
+2. **Focusrite Control routing.** Outputs 3/4 must be fed from Playback 3/4 alone. If a
+   hardware mix routes Input 1 to outputs 3/4, an analog feedback loop is closed inside the
+   interface — one the DSP cannot see, cannot regulate and cannot mute. Direct Monitor off.
+
+Channel indices are **not** to be taken on trust: confirm by sending a tone to one output
+at a time and observing where it appears.
+
 ---
 
 ## 4. Electrical constraints and gotchas
@@ -143,6 +182,23 @@ The rig can produce a lot of acoustic energy on its own initiative.
 
 - **Hardware kill:** the volume pedal at heel. Always reachable. It is the primary safety device.
 - **Software kill:** a hard output ceiling in the DSP that no automatic tuning may raise, and a mute-on-error path (any xrun, NaN, or watchdog timeout ⇒ output muted).
+
+
+### 4.6 Fail-safe on the Mac rig
+
+§4.5 names the volume pedal at heel as the primary hardware kill. On the Mac rig that pedal
+is not in the chain unless it is deliberately put back, and the Scarlett's monitor knob is
+not a substitute (§3.3). So:
+
+- **Recommended: put the volume pedal back**, between Scarlett out 3/4 and the power amp.
+  It restores the primary hardware kill *and* the loop-gain control the whole of §8 assumes.
+- If it is not used, **the power amp's own volume control is the designated kill and must
+  be within arm's reach.** Name it out loud at the start of every session.
+- Software side, unchanged in spirit: hard output ceiling as a constant no tuning may raise,
+  a watchdog that mutes without a fresh heartbeat, and mute on NaN, non-finite output,
+  xrun burst, callback exception or stream stop.
+- Every session starts with the amp at zero and the loop gain ramped up from silence.
+  Never resume at the previous session's setting.
 
 ---
 

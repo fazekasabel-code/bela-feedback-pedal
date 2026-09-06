@@ -3,10 +3,18 @@
 These are binding rules for any agent session (Claude, Cursor) working in this repo.
 The full reasoning is in `docs/ground-rules-and-facts.md`; this file is the enforceable summary.
 
+## Current platform
+
+**The Bela is not connectable. Gen1 is being built on a Mac + Focusrite Scarlett 8i6.**
+Guitar into input 1 (INST), exciter chain off outputs 3/4, DSP in Python in the audio
+callback. `docs/mac-rig-plan.md` is the live plan; `docs/phase-plan.md` is the Bela plan,
+parked. The physics, DSP architecture and metrics are unchanged by the move.
+
 ## Read first
 
 - `docs/ground-rules-and-facts.md` — facts, constraints, DSP architecture, safety
-- `docs/phase-plan.md` — what phase we are in and what its exit criterion is
+  (see the 2026-09-06 amendment, and §3.3 / §4.6 for the Mac rig)
+- `docs/mac-rig-plan.md` — the current plan and which phase we are in
 - `rig-profile.json` — the measured truth about the physical rig
 
 Never contradict the ground-rules doc silently. If the work requires changing a fact or a
@@ -25,23 +33,33 @@ constraint in it, change the doc in the same commit and say so.
    to recover and keep running.
 5. Power amp gain and exciter mounting position are fixed constants of the rig profile.
    Never ask for them to be changed mid-session to make a test pass.
+6. **On the Mac rig, the Scarlett's monitor knob is not a kill switch** — outputs 3/4 are
+   fixed-level. The kill is the volume pedal patched between out 3/4 and the amp, or the
+   amp's own volume control within arm's reach. Name it before any live-loop run.
+7. **Focusrite Control must feed outputs 3/4 from Playback 3/4 only.** A hardware mix
+   carrying Input 1 to those outputs closes an analog loop the DSP cannot see or mute.
+8. Safety-critical code — the output ceiling, the watchdog, the mute paths — is written
+   here, not delegated to Cursor.
 
 ## Process
 
-6. **One variable at a time.** Every run is a named parameter set, committed, A/B'd
+9. **One variable at a time.** Every run is a named parameter set, committed, A/B'd
    against the current best.
-7. Every test run writes a log record to `logs/`: git commit hash, rig-profile hash, the
+10. Every test run writes a log record to `logs/`: git commit hash, rig-profile hash, the
    full parameter set, all proxy metrics, and the path to the recorded audio.
    A result without its parameter set is not a result.
-8. **Simulator first, hardware second.** Parameter searches run against the offline loop
-   simulator. The real rig is for validation and musical judgement, not grid search.
-9. If the rig physically changes — different guitar, exciter moved, amp gain touched —
+11. **Simulator first, hardware second.** Parameter *searches* run against the offline
+   loop simulator. The real rig is for validation and musical judgement, not grid search.
+   (Proposed narrowing on the Mac rig, pending Abel's sign-off: a single-hypothesis A/B may
+   go straight to the rig, now that the deploy step that made rig time expensive is gone.
+   Grid search still goes to the simulator. Until he signs off, the rule stands as written.)
+12. If the rig physically changes — different guitar, exciter moved, amp gain touched —
    the rig profile is re-measured and its version bumped, and prior results are tagged as
    belonging to the old profile.
-10. `main` always boots and makes sound. Work on branches.
-11. When you are unsure whether a change is a correctness fix or a taste decision, it is a
+13. `main` always boots and makes sound. Work on branches.
+14. When you are unsure whether a change is a correctness fix or a taste decision, it is a
     taste decision. Stop and ask Abel.
-12. The proxy metrics in `host/harness/metrics.py` are a stand-in for Abel's ears. When his
+15. The proxy metrics in `host/harness/metrics.py` are a stand-in for Abel's ears. When his
     rating of a take disagrees with the metrics, **the metric is the bug** — rewrite the
     metric, do not argue for the tuning.
 
@@ -50,6 +68,8 @@ constraint in it, change the doc in the same commit and say so.
 - **"Suppression"** in this project always means *regulation to a target level*, never removal.
   The actuator is a per-partial gain cell with a level target, not a fixed-depth notch.
 - **Controlled loop** = pickup → Bela → volume pedal → power amp → exciter → body → strings → pickup.
+- **Controlled loop (Mac rig)** = pickup → Scarlett in 1 → Mac DSP → Scarlett out 3/4 →
+  attenuator → power amp → exciter → body → strings → pickup.
 - **Uncontrolled loop** = amp → air → guitar. Kept silent during development.
 - **Cell** = one adaptive gain-regulation unit bound to one partial.
 - **Rig profile** = the versioned file of measured facts about the physical setup.
