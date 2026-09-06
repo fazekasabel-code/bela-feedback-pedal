@@ -7,7 +7,7 @@ still stands unchanged. What changes is the platform, the latency budget, the co
 surface and the safety hardware. Those changes are recorded in §3.3 and §4.6 of the
 ground-rules doc — this file does not silently contradict it.
 
-Drafted 2026-09-06. Status: not yet run.
+Drafted 2026-09-06. Status: M0 partly measured — see §3 and §4.
 
 ---
 
@@ -31,8 +31,9 @@ That is the whole bring-up test.
 ground-rule §4.1 — "never drive Bela's ~20 kΩ ADC with a passive pickup" — is satisfied by
 the hardware. No external buffer needed.
 
-**What the new rig costs.** Round-trip latency goes from Bela's ~1 ms to something in the
-5–15 ms range (USB + CoreAudio double-buffering + converters). This is not fatal — latency
+**What the new rig costs.** Round-trip latency goes from Bela's ~1 ms to roughly 25 ms of
+configured buffering (11 ms in + 14 ms out, measured 2026-09-06 — and only after explicitly
+asking PortAudio for low latency; see §3). This is not fatal — latency
 sets *which* partials satisfy the 360°·n phase condition, i.e. the spacing of the comb, not
 whether feedback happens. It does tighten the jump-detection budget of §7. Measure it in
 M0 and treat the number as a fact, not a nuisance.
@@ -89,6 +90,17 @@ Why this and not the alternatives:
 | JUCE / C++ plugin | The right answer for a product, far too heavy for finding out whether the idea works. |
 | Bela | Unavailable. The port back is easy later — the DSP is a few hundred lines of arithmetic. |
 
+**Measured, 2026-09-06, before any of this was tuned:** 60 s duplex at 48 kHz / 128 frames,
+**zero xruns**, callback worst case **0.084 ms against a 2.67 ms deadline** — about 3% of
+the budget. Python is not the bottleneck. But the first run also exposed a trap worth
+recording: `sounddevice` defaults to `latency="high"`, and on this interface that asked for
+**~90 ms of buffering in each direction**. Asking for `"low"` brings it to ~11 ms in /
+~14 ms out. In a feedback loop that difference is not comfort — loop delay sets which
+partials satisfy the 360°·n phase condition, so 180 ms round trip would pack the comb teeth
+about 5 Hz apart and put the §7 jump budget out of reach. **Every stream in this project
+asks for low latency explicitly.** The number that actually counts is still the electrical
+loopback measurement, which needs a cable.
+
 **The known risk is Python, honestly stated:** garbage collection or an allocation in the
 callback causes a dropout, and a dropout inside a feedback loop is a click the loop then
 amplifies. Mitigations, all cheap: preallocate every buffer at startup, no allocation and
@@ -125,6 +137,10 @@ Nothing drives the exciter in this phase. The amp is off or unplugged.
 
 **Exit:** the stream opens reproducibly, 60 s at 128 frames with zero xruns, the channel
 map is confirmed by observation, the round-trip latency is a number in the profile.
+
+*Status: the xrun and headroom halves are done and clean (see §3). What is left needs the
+guitar plugged in (`meter`), and a loopback cable plus a confirmed amp-off (`map`,
+`latency`).*
 
 ### M1 — close the loop and confirm feedback · *Abel present, this is the milestone*
 

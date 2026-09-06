@@ -5,7 +5,6 @@
   "measured_at": null,
   "measured_by": null,
   "_platform_note": "Moved from Bela to a Mac host on 2026-09-06 because the Bela is not connectable. See docs/ground-rules-and-facts.md 3.3 and docs/mac-rig-plan.md. The parked Bela profile shape is preserved under 'bela_parked'.",
-
   "host": {
     "interface": "Focusrite Scarlett 8i6",
     "sample_rate": 48000,
@@ -14,18 +13,39 @@
     "output_channels_open": 4,
     "guitar_input_index": 0,
     "guitar_input_label": "Scarlett input 1, INST / Hi-Z",
-    "exciter_output_indices": [2, 3],
+    "exciter_output_indices": [
+      2,
+      3
+    ],
     "exciter_output_label": "Scarlett outputs 3/4",
     "_channel_index_note": "0-based indices into the device's channel list. NOT confirmed. M0 confirms them by sending a tone to one output at a time and observing where it lands. Do not trust these until measured_at is set.",
     "round_trip_latency_ms": null,
     "round_trip_latency_samples": null,
     "_latency_note": "Measured electrically by patching an output back to an input. Sets the spacing of the phase-condition comb.",
-    "xruns_in_60s_at_block": null,
+    "xruns_in_60s_at_block": {
+      "blocks": 22500,
+      "input_overflows": 0,
+      "output_underflows": 0,
+      "latency_hint": "low",
+      "_note": "60.00 s at 48 kHz / 128 frames, clean. Re-run after any change to block size or latency hint."
+    },
     "monitor_knob_attenuates_out_34": null,
     "focusrite_control_out34_source": null,
-    "_focusrite_note": "Must read 'Playback 3/4' only. A hardware mix carrying Input 1 to outputs 3/4 closes an analog loop the DSP cannot see or mute."
+    "_focusrite_note": "Must read 'Playback 3/4' only. A hardware mix carrying Input 1 to outputs 3/4 closes an analog loop the DSP cannot see or mute.",
+    "portaudio_latency_hint": "low",
+    "_latency_hint_note": "sounddevice defaults to 'high', which asked this interface for ~90 ms of buffering per direction. Measured 88.6 in / 91.0 out on the default, 11.3 in / 13.7 out with 'low', both with zero xruns. Never open a stream on the default.",
+    "portaudio_reported_latency_ms": {
+      "in": 11.25,
+      "out": 13.69,
+      "_note": "PortAudio's configured buffering, NOT a measurement. The real number is the electrical loopback in round_trip_latency_ms, still unmeasured."
+    },
+    "callback_headroom": {
+      "max_ms": 0.062,
+      "mean_ms": 0.0066,
+      "budget_ms": 2.67,
+      "_note": "Worst case is about 2 percent of the block deadline. Python is not the bottleneck."
+    }
   },
-
   "gain_staging": {
     "split_point": "guitar direct into interface",
     "scarlett_input_gain_setting": null,
@@ -37,27 +57,23 @@
     "power_amp_gain_setting": null,
     "_amp_note": "Fixed constant once set. Never a variable under test."
   },
-
   "safety": {
     "designated_hardware_kill": null,
     "_kill_note": "Either the volume pedal patched between Scarlett out 3/4 and the amp (recommended), or the amp's own volume control within arm's reach. The Scarlett monitor knob is NOT a kill for outputs 3/4. Must be filled in before any live-loop run.",
     "watchdog_timeout_s": null
   },
-
   "instrument": {
     "guitar": null,
     "tuning": null,
     "pickup": null,
     "string_partials_hz": []
   },
-
   "exciter": {
     "model": null,
     "mounting_position": null,
     "impedance_ohms": null,
     "power_handling_w": null
   },
-
   "loop": {
     "unity_gain_master_setting": null,
     "_unity_note": "The software master gain at which the loop first reaches unity, with the amp at its fixed setting. This is the M1 headline measurement.",
@@ -66,17 +82,14 @@
     "_candidates_note": "Ranked jump-destination list. On this rig it comes from the M1 baseline takes rather than a swept sine, until a sweep is worth the time.",
     "transfer_function_measurement": null
   },
-
   "control": {
     "regulation_depth_source": null,
     "_control_note": "No analog input on this rig. Regulation depth is a MIDI CC or a keyboard key until the Bela returns. Same axis as the expression pedal, different transducer."
   },
-
   "baseline": {
     "unregulated_takes": [],
     "_note": "The 'before' recordings: the loop feeding back with no regulation, at several master-gain positions. Every later result is compared against these."
   },
-
   "bela_parked": {
     "_note": "Kept for when the board is connectable again. See docs/phase-plan.md.",
     "block_size": null,
