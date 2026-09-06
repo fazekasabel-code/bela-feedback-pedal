@@ -1,6 +1,12 @@
 # audio takes and streamed data — large, keep out of git
 logs/**
 !logs/.gitkeep
+# ...but the JSON log records themselves are small and ARE the result. Process rule 11
+# says a result without its parameter set is not a result; gitignoring the records would
+# delete exactly that on any clone, leaving orphan wavs nobody can attribute. The audio
+# stays out via the *.wav rule below.
+!logs/**/
+!logs/**/*.json
 *.wav
 *.aif
 *.aiff

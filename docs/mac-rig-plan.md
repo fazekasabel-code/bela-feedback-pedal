@@ -44,31 +44,37 @@ M0 and treat the number as a fact, not a nuisance.
 
 ## 2. Safety on this rig — read before the amp is switched on
 
-The old primary kill was the volume pedal at heel. That device is gone from the chain
-unless we put it back, and the replacement is **not** the Scarlett's big monitor knob:
+**Settled with Abel, 2026-09-06.** The answers to the open questions this section used to
+carry:
 
-> **On the 8i6, outputs 3/4 are fixed-level line outputs. The front-panel monitor knob
-> attenuates outputs 1/2 only. Turning it down does nothing to the exciter.**
-> Verify this on the actual unit in M0 before trusting it either way.
+- **Routing confirmed.** Outputs 3/4 are fed from Playback 3/4, and leave the interface via
+  the **second headphone jack**, which drives the power amp. No hardware mix carries Input 1
+  to those outputs. Re-check every session anyway; it is one click away from being wrong.
+- **There is no volume pedal.** The designated kill is therefore the **headphone-2 level
+  knob** — it is on the desk, which makes it a better kill than reaching for the amp — with
+  the power amp's own control as the backstop. Abel operates it; the software has no
+  physical authority over level.
+- **Sustained unchecked feedback is accepted**, explicitly, because *only the controlled
+  loop is live*: the guitar-amp path is dead, so the runaway acoustic loop of §2.3 cannot
+  form. A run does not have to be killed between rounds.
 
-So:
+That last permission is conditional and worth stating as a condition rather than a fact:
+**it holds only while the guitar amp is dead.** Switch the amp on and the second,
+uncontrolled loop is back, the reason for the permission is gone, and the strict form of
+ground rule 2 applies again.
 
-1. **Put the volume pedal back, between Scarlett out 3/4 and the power amp.** It costs
-   nothing, it restores the primary hardware kill, and it restores the loop-gain control
-   that the whole control surface of §8 is built around. If the pedal is not used, the
-   power amp's own volume control must be within arm's reach and is the designated kill.
-2. **Focusrite Control: outputs 3/4 must be fed from "Playback 3/4" only.** Not from a
-   hardware mix containing Input 1, and Direct Monitor off. A hardware-mix path would close
-   an *analog* loop inside the interface that the DSP cannot see, cannot regulate and
-   cannot mute. Check this every session; it is one mouse-click away from being wrong.
-3. **Hard output ceiling in the DSP.** A constant. No tuning process may raise it —
+What stays regardless:
+
+1. **Hard output ceiling in the DSP.** A constant. No tuning process may raise it —
    ground rule 1, unchanged, and it is why the ceiling code is not delegated to Cursor.
-4. **Watchdog.** Every live-loop run is time-boxed. No heartbeat, no run: it mutes.
-5. **Mute on anything odd** — NaN, non-finite sample, xrun burst, callback exception,
-   stream stop. Never "recover and keep going".
-6. **Every session starts with the amp at zero** and the loop gain ramped up from silence.
+   Abel accepting loud feedback is not the same as letting an optimiser choose the level.
+2. **Watchdog.** Every live-loop run is time-boxed. Generous now rather than tight, since
+   a long run is fine — but a run can never outlive the session that started it.
+3. **Mute on anything odd** — NaN, non-finite sample, callback exception, stream stop.
+   Never "recover and keep going".
+4. **Every session starts with the amp down** and the loop gain ramped up from silence.
    Never start a run at the last session's setting.
-7. Real-loop runs happen only with Abel present and confirming, per ground rule 2.
+5. Real-loop runs happen only with Abel present and confirming, per ground rule 2.
 
 ---
 
@@ -121,26 +127,26 @@ design and it is a legitimate one.
 
 Five, not eight. Each states what gets built, who is needed, and the exit criterion.
 
-### M0 — I/O bring-up · *agent alone, amp OFF*
+### M0 — I/O bring-up · *agent alone; amp down, not off*
 
-Nothing drives the exciter in this phase. The amp is off or unplugged.
-
-- `host/rig/io_check.py`: open the Scarlett at 48 kHz / 128 frames, confirm the channel map
-  by measurement (send a tone to one output at a time and see where it appears — do not
-  trust that "output 3/4" is index 2/3 until it is observed), meter input 1 with the guitar
-  plugged in, count xruns over 60 s.
-- **Round-trip latency, measured electrically:** patch output 3 back into a line input,
-  send an impulse, find the sample offset. That is the real number for the phase condition.
+- `host/rig/io_check.py`: open the Scarlett at 48 kHz / 128 frames, meter input 1 with the
+  guitar plugged in, count xruns over 60 s.
+- **Channel map, confirmed by observation.** `io_check map --out N` puts a quiet tone on one
+  output and watches the input RMS. On the Bela rig that needed a loopback cable; here it
+  does not, because **the exciter already closes the path** — a tone on the right output
+  goes amp → exciter → body → strings → pickup → input 1, and input 1 lifts. So the same
+  command confirms the channel index *and* proves the whole physical chain in one move, at
+  a tone amplitude of 0.05 with the amp turned well down. A wrong index shows nothing.
 - Set input gain so normal playing peaks around −12 dBFS, leaving headroom for the loop
   to grow into.
-- Write `rig-profile.json` v1 for this rig.
+- Round-trip latency: **optional here.** Abel has deprioritised it (§7) — this rig is for
+  testing. `io_check latency` and a cable remain available if the comb spacing ever matters.
 
-**Exit:** the stream opens reproducibly, 60 s at 128 frames with zero xruns, the channel
-map is confirmed by observation, the round-trip latency is a number in the profile.
+**Exit:** the stream opens reproducibly, 60 s at 128 frames with zero xruns, the channel map
+is confirmed by observation, input gain is staged.
 
-*Status: the xrun and headroom halves are done and clean (see §3). What is left needs the
-guitar plugged in (`meter`), and a loopback cable plus a confirmed amp-off (`map`,
-`latency`).*
+*Status: xruns and callback headroom are done and clean (§3). The channel map and the gain
+staging need the guitar plugged in and Abel's hand on the headphone-2 knob.*
 
 ### M1 — close the loop and confirm feedback · *Abel present, this is the milestone*
 
@@ -247,19 +253,32 @@ routing it through a second agent adds a hop where it can drift, for no benefit.
 
 ## 7. Open questions — answer by measurement, or by Abel
 
-1. **Is the volume pedal going back into the chain between out 3/4 and the amp?** If not,
-   name the designated hardware kill. *Blocking for M1.*
-2. Does the Scarlett's monitor knob attenuate outputs 3/4 on this unit? *Measure in M0.*
-3. Measured round-trip latency at 128 frames, and therefore the comb spacing. *M0.*
-4. Can Python hold 128 frames with zero xruns for a full take? *M0.*
-5. Which guitar, which tuning, which pickup. *Needed for the candidate list.*
-6. Where the exciter sits on the body, and whether it drives the strings or mainly the top
+**Answered, 2026-09-06:**
+
+- ~~Is the volume pedal going back in?~~ No pedal. The kill is the headphone-2 level knob,
+  Abel's hand on it. See §2.
+- ~~Focusrite routing?~~ Playback 3/4 → headphone 2 → power amp. Confirmed, no hardware mix.
+- ~~Can Python hold 128 frames with zero xruns?~~ Yes. 60.00 s, 22500 blocks, zero xruns,
+  callback worst case 0.062 ms against a 2.67 ms deadline. See §3.
+- ~~Round-trip latency and comb spacing?~~ **Deprioritised by Abel** — this rig is for
+  testing and latency is not a concern here. The electrical loopback measurement is
+  therefore optional, not an M0 exit criterion. PortAudio reports ~25 ms of configured
+  buffering; if a partial-selection question ever turns on the exact comb spacing, measure
+  it then with `io_check latency` and a cable.
+
+**Still open:**
+
+1. Which guitar, which tuning, which pickup. *Needed for the candidate list.*
+2. Where the exciter sits on the body, and whether it drives the strings or mainly the top
    — this decides whether feedback locks to string partials or body modes. *M1.*
-7. **Does Abel accept narrowing ground rule 8** — simulator-first for parameter *searches*,
+3. **Does Abel accept narrowing ground rule 12** — simulator-first for parameter *searches*,
    but a single-hypothesis A/B may now go straight to the rig, since the deploy step that
    made rig time expensive is gone? *Blocking for M4, not before.*
-8. Does the loop restart cleanly from silence, or does the guitar need damping between
+4. Does the loop restart cleanly from silence, or does the guitar need damping between
    takes?
+5. Which output index is really "outputs 3/4"? Still unconfirmed by observation — but on
+   this rig the confirmation is free, because the exciter closes the path back to input 1.
+   See M0's revised channel-map step in §4.
 
 ---
 
