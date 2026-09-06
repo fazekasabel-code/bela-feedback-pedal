@@ -1,0 +1,24 @@
+# audio takes and streamed data — large, keep out of git
+logs/**
+!logs/.gitkeep
+*.wav
+*.aif
+*.aiff
+*.flac
+*.npy
+*.npz
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# macos
+.DS_Store
+
+# bela build artifacts
+*.o
+*.d
+build/

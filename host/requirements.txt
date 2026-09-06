@@ -1,0 +1,6 @@
+numpy>=1.24
+scipy>=1.10
+soundfile>=0.12
+# pybela — streaming/logging/monitoring of Bela variables from Python (Phase 1).
+# Needs Bela's dev branch on the board and the Watcher library in the project.
+pybela>=0.1

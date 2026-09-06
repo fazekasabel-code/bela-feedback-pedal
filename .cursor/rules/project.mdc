@@ -1,0 +1,18 @@
+---
+description: Ground rules for the bela-feedback-pedal project
+alwaysApply: true
+---
+
+Follow `CLAUDE.md` at the repo root in full. It is the binding rule set for this project.
+
+Key points that are easy to get wrong:
+
+- Bela's audio input is ~20 kOhm at the ADC. The split feeding it must be buffered.
+- Bela analog inputs read 0-4.096 V, but the expression pedal is fed from the 3.3 V rail,
+  so full travel reads roughly 0 -> 0.806, not 0 -> 1. Never hard-code 0-1; use the
+  calibrated endpoints in `rig-profile.json`.
+- The actuator is a peaking-EQ biquad with a *level target*, not a fixed-depth notch.
+- Detection arms on growth rate, not on which partial is loudest.
+- Frequency movement within +/-50 cents between frames = the same partial gliding.
+  Outside that = a new event and a new cell. Do not build a continuity tracker.
+- The output ceiling is a safety constant. No tuning process may raise it.

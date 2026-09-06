@@ -1,0 +1,60 @@
+{
+  "_comment": "The measured truth about the physical rig. Everything reads this. All values null until Phase 1 measures them. Bump version and re-measure whenever the rig physically changes: different guitar, exciter moved, amp gain touched.",
+  "version": 0,
+  "measured_at": null,
+  "measured_by": null,
+
+  "bela": {
+    "block_size": null,
+    "audio_sample_rate": 44100,
+    "analog_sample_rate": null,
+    "round_trip_latency_ms": null,
+    "cpu_load_idle_pct": null
+  },
+
+  "gain_staging": {
+    "split_point": "pre-effects",
+    "buffer_used": null,
+    "pickup_into_bela_peak_dbfs": null,
+    "bela_out_nominal_dbfs": null,
+    "power_amp_gain_setting": null,
+    "power_amp_model": null,
+    "_note": "power_amp_gain_setting is a fixed constant once set. Never a variable under test."
+  },
+
+  "instrument": {
+    "guitar": null,
+    "tuning": null,
+    "pickup": null,
+    "string_partials_hz": []
+  },
+
+  "exciter": {
+    "model": null,
+    "mounting_position": null,
+    "impedance_ohms": null,
+    "power_handling_w": null
+  },
+
+  "loop": {
+    "round_trip_delay_ms": null,
+    "unity_gain_volume_pedal_position": null,
+    "transfer_function_measurement": null,
+    "candidate_frequencies_hz": [],
+    "_note": "candidate_frequencies_hz is the ranked jump-destination list from the swept-sine measurement. It seeds the Goertzel bank."
+  },
+
+  "expression_pedal": {
+    "pot_value_ohms": null,
+    "taper": null,
+    "trs_wiring": null,
+    "adc_heel": null,
+    "adc_toe": null,
+    "_note": "adc_heel/adc_toe are raw 0-1 analogRead values. A 3.3 V-fed pedal tops out near 0.806, not 1.0. Never hard-code the range."
+  },
+
+  "baseline": {
+    "unregulated_take": null,
+    "_note": "The 'before' recording: the rig feeding back with no regulation. Every later result is compared against it."
+  }
+}
