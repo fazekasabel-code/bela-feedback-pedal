@@ -1,9 +1,9 @@
 {
   "_comment": "The measured truth about the physical rig. Everything reads this. All values null until they are measured. Bump version and re-measure whenever the rig physically changes: different guitar, exciter moved, amp gain touched, interface settings changed. Version 0 means nothing has been measured yet.",
-  "version": 0,
+  "version": 1,
   "platform": "mac-scarlett-8i6",
-  "measured_at": null,
-  "measured_by": null,
+  "measured_at": "2026-09-06",
+  "measured_by": "Claude, unattended, per Abel's standing permission",
   "_platform_note": "Moved from Bela to a Mac host on 2026-09-06 because the Bela is not connectable. See docs/ground-rules-and-facts.md 3.3 and docs/mac-rig-plan.md. The parked Bela profile shape is preserved under 'bela_parked'.",
   "host": {
     "interface": "Focusrite Scarlett 8i6",
@@ -18,7 +18,7 @@
       3
     ],
     "exciter_output_label": "Scarlett outputs 3/4",
-    "_channel_index_note": "0-based indices into the device's channel list. NOT confirmed. M0 confirms them by sending a tone to one output at a time and observing where it lands. Do not trust these until measured_at is set.",
+    "_channel_index_note": "Confirmed. Abel ran io_check map and the tone came back through the exciter into input 1. Outputs 3/4 leave via the second headphone jack.",
     "round_trip_latency_ms": null,
     "round_trip_latency_samples": null,
     "_latency_note": "Measured electrically by patching an output back to an input. Sets the spacing of the phase-condition comb.",
@@ -29,8 +29,8 @@
       "latency_hint": "low",
       "_note": "60.00 s at 48 kHz / 128 frames, clean. Re-run after any change to block size or latency hint."
     },
-    "monitor_knob_attenuates_out_34": null,
-    "focusrite_control_out34_source": null,
+    "monitor_knob_attenuates_out_34": false,
+    "focusrite_control_out34_source": "Playback 3/4 (confirmed by Abel 2026-09-06)",
     "_focusrite_note": "Must read 'Playback 3/4' only. A hardware mix carrying Input 1 to outputs 3/4 closes an analog loop the DSP cannot see or mute.",
     "portaudio_latency_hint": "low",
     "_latency_hint_note": "sounddevice defaults to 'high', which asked this interface for ~90 ms of buffering per direction. Measured 88.6 in / 91.0 out on the default, 11.3 in / 13.7 out with 'low', both with zero xruns. Never open a stream on the default.",
@@ -51,16 +51,18 @@
     "scarlett_input_gain_setting": null,
     "pickup_into_interface_peak_dbfs": null,
     "_target": "about -12 dBFS peak on normal playing, so feedback growth has room before clipping",
-    "dsp_output_ceiling": null,
+    "dsp_output_ceiling": 0.7,
     "_ceiling_note": "A safety constant in code. No tuning process may raise it. Recorded here for the log only; code is the authority.",
     "power_amp_model": null,
     "power_amp_gain_setting": null,
     "_amp_note": "Fixed constant once set. Never a variable under test."
   },
   "safety": {
-    "designated_hardware_kill": null,
+    "designated_hardware_kill": "Scarlett headphone-2 level knob; power amp volume as backstop",
     "_kill_note": "Either the volume pedal patched between Scarlett out 3/4 and the amp (recommended), or the amp's own volume control within arm's reach. The Scarlett monitor knob is NOT a kill for outputs 3/4. Must be filled in before any live-loop run.",
-    "watchdog_timeout_s": null
+    "watchdog_timeout_s": 120,
+    "unattended_runs_permitted": true,
+    "_unattended_note": "Abel, 2026-09-06. Rests entirely on the guitar amp being dead so only the controlled loop is live. Lapses if the guitar amp is switched on."
   },
   "instrument": {
     "guitar": null,
@@ -75,11 +77,16 @@
     "power_handling_w": null
   },
   "loop": {
-    "unity_gain_master_setting": null,
-    "_unity_note": "The software master gain at which the loop first reaches unity, with the amp at its fixed setting. This is the M1 headline measurement.",
-    "first_partial_hz": null,
-    "candidate_frequencies_hz": [],
-    "_candidates_note": "Ranked jump-destination list. On this rig it comes from the M1 baseline takes rather than a swept sine, until a sweep is worth the time.",
+    "unity_gain_master_setting": 0.3,
+    "_unity_note": "Linear master gain in sc/gen1_cell.scd at which the loop reaches unity, with the amp at its 2026-09-06 setting. Measured by ramp: nothing below 0.26, sustained feedback from ~0.30. Useful range 0.30-0.35 is narrow; the script cap is 0.35.",
+    "first_partial_hz": 392.5,
+    "candidate_frequencies_hz": [
+      392.5,
+      293.5,
+      587.0,
+      785.1
+    ],
+    "_candidates_note": "Ranked from the 2026-09-06 takes. 392.5 G4 is what the raw loop chooses; 293.5 D4 is what comes up when G4 is regulated; 587.0 D5 and 785.1 G5 are the octaves seen 23-29 dB down.",
     "transfer_function_measurement": null
   },
   "control": {
@@ -87,7 +94,9 @@
     "_control_note": "No analog input on this rig. Regulation depth is a MIDI CC or a keyboard key until the Bela returns. Same axis as the expression pedal, different transducer."
   },
   "baseline": {
-    "unregulated_takes": [],
+    "unregulated_takes": [
+      "logs/2026-09-06/gen1_base_035.wav"
+    ],
     "_note": "The 'before' recordings: the loop feeding back with no regulation, at several master-gain positions. Every later result is compared against these."
   },
   "bela_parked": {

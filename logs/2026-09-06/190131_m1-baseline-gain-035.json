@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "run_name": "m1-baseline-gain-035",
+  "provenance": {
+    "git_commit": "18500c0",
+    "git_dirty": true,
+    "rig_profile_sha256": "81047acc7a268b5e4fe42f70f3e46059cbab310b984efcdd6ecce5c8e2960268",
+    "rig_profile_version": 0,
+    "recorded_at": "2026-09-06T19:01:31.168545+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit-Mach-O"
+  },
+  "params": {
+    "bypass": 1,
+    "gain_end": 0.35,
+    "ramp_s": 35,
+    "seconds": 45,
+    "sample_rate": 48000,
+    "block_size": 128,
+    "ceiling": 0.7,
+    "engine": "supercollider",
+    "patch": "sc/gen1_cell.scd",
+    "telemetry": "logs/2026-09-06/gen1_base_035.wav.telemetry.csv"
+  },
+  "metrics": {
+    "path": "/Users/abel/Library/Mobile Documents/com~apple~CloudDocs/works coding/bela-feedback-pedal/logs/2026-09-06/gen1_base_035.wav",
+    "duration_s": 46.586666666666666,
+    "sample_rate": 48000,
+    "dominant_hz": 392.5760594639784,
+    "dominant_stability_cents": 0.43487891414770274,
+    "mean_partials": 1.9389228206551916,
+    "p10_partials": 1.0,
+    "dominance_db": 55.89665343756793,
+    "top_partials": [
+      {
+        "freq_hz": 392.6162856824604,
+        "level_db": 0.0
+      },
+      {
+        "freq_hz": 293.60618647889095,
+        "level_db": -19.833618552192924
+      },
+      {
+        "freq_hz": 293.69603925203126,
+        "level_db": -20.97391667368029
+      },
+      {
+        "freq_hz": 785.1313659620503,
+        "level_db": -25.846088287858382
+      },
+      {
+        "freq_hz": 50.142626355388316,
+        "level_db": -25.55687650328623
+      }
+    ],
+    "feedback_onset_s": 27.296,
+    "sustained_fraction": 0.41307339449541286
+  },
+  "audio_path": "logs/2026-09-06/gen1_base_035.wav",
+  "notes": "THE BASELINE. Feedback onset at master gain ~0.30, locked on G4 392.5 Hz, stable to 0.4 cents. Winner-takes-all: next partial 25.7 dB down. This is the 'before' every later result is compared against."
+}

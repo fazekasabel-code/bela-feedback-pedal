@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "run_name": "m3-cell-peakingeq-target-24",
+  "provenance": {
+    "git_commit": "18500c0",
+    "git_dirty": true,
+    "rig_profile_sha256": "81047acc7a268b5e4fe42f70f3e46059cbab310b984efcdd6ecce5c8e2960268",
+    "rig_profile_version": 0,
+    "recorded_at": "2026-09-06T19:01:31.754611+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit-Mach-O"
+  },
+  "params": {
+    "bypass": 0,
+    "actuator": 0,
+    "target_db": -24.0,
+    "rq": 0.1,
+    "attack": 0.003,
+    "release": 0.4,
+    "max_cut_db": 30,
+    "gain_end": 0.35,
+    "ramp_s": 15,
+    "seconds": 45,
+    "sample_rate": 48000,
+    "block_size": 128,
+    "ceiling": 0.7,
+    "engine": "supercollider",
+    "patch": "sc/gen1_cell.scd",
+    "telemetry": "logs/2026-09-06/gen1_cell_t24.wav.telemetry.csv"
+  },
+  "metrics": {
+    "path": "/Users/abel/Library/Mobile Documents/com~apple~CloudDocs/works coding/bela-feedback-pedal/logs/2026-09-06/gen1_cell_t24.wav",
+    "duration_s": 46.034666666666666,
+    "sample_rate": 48000,
+    "dominant_hz": 392.54546529083774,
+    "dominant_stability_cents": 502.9942913620707,
+    "mean_partials": 1.8985808238144686,
+    "p10_partials": 1.0,
+    "dominance_db": 49.493034391597305,
+    "top_partials": [
+      {
+        "freq_hz": 293.58233246642044,
+        "level_db": -1.8274585084796382
+      },
+      {
+        "freq_hz": 392.5612037250355,
+        "level_db": -1.228584246552589
+      },
+      {
+        "freq_hz": 293.69184633969036,
+        "level_db": -16.042592193863378
+      },
+      {
+        "freq_hz": 587.1471027347478,
+        "level_db": -28.25837377070924
+      },
+      {
+        "freq_hz": 587.3576235014614,
+        "level_db": -27.838879315974555
+      }
+    ],
+    "feedback_onset_s": 15.136,
+    "sustained_fraction": 0.6706128133704735
+  },
+  "audio_path": "logs/2026-09-06/gen1_cell_t24.wav",
+  "notes": "Cell held G4 at target with a steady -4 dB for ~12 s, then the loop moved and D4 came up to within 2.8 dB of G4. Second partial blooms; feedback sustains. But the Pitch.kr detector reported ~330 Hz in the two-partial regime, where there is no energy at all - it finds a fundamental, not the dominant partial."
+}

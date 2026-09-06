@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "run_name": "m3-cell-brf-target-24",
+  "provenance": {
+    "git_commit": "18500c0",
+    "git_dirty": true,
+    "rig_profile_sha256": "81047acc7a268b5e4fe42f70f3e46059cbab310b984efcdd6ecce5c8e2960268",
+    "rig_profile_version": 0,
+    "recorded_at": "2026-09-06T19:01:32.422845+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit-Mach-O"
+  },
+  "params": {
+    "bypass": 0,
+    "actuator": 1,
+    "target_db": -24.0,
+    "rq": 0.1,
+    "attack": 0.003,
+    "release": 0.4,
+    "max_cut_db": 30,
+    "gain_end": 0.35,
+    "ramp_s": 15,
+    "seconds": 45,
+    "sample_rate": 48000,
+    "block_size": 128,
+    "ceiling": 0.7,
+    "engine": "supercollider",
+    "patch": "sc/gen1_cell.scd",
+    "telemetry": "logs/2026-09-06/gen1_brf_t24.wav.telemetry.csv"
+  },
+  "metrics": {
+    "path": "/Users/abel/Library/Mobile Documents/com~apple~CloudDocs/works coding/bela-feedback-pedal/logs/2026-09-06/gen1_brf_t24.wav",
+    "duration_s": 46.090666666666664,
+    "sample_rate": 48000,
+    "dominant_hz": 293.6137365580094,
+    "dominant_stability_cents": 502.90181506679437,
+    "mean_partials": 2.526017699115044,
+    "p10_partials": 1.0,
+    "dominance_db": 33.919686432303266,
+    "top_partials": [
+      {
+        "freq_hz": 293.5958691824668,
+        "level_db": -2.182374989773468
+      },
+      {
+        "freq_hz": 392.5592496325311,
+        "level_db": -4.762867700557274
+      },
+      {
+        "freq_hz": 293.6940877795556,
+        "level_db": -15.849237871308711
+      },
+      {
+        "freq_hz": 587.2021509734512,
+        "level_db": -24.02767952365346
+      },
+      {
+        "freq_hz": 785.128032891325,
+        "level_db": -24.61455197431809
+      }
+    ],
+    "feedback_onset_s": 15.882666666666667,
+    "sustained_fraction": 0.6548446917014372
+  },
+  "audio_path": "logs/2026-09-06/gen1_brf_t24.wav",
+  "notes": "Band-reject actuator, same parameters. Better on the aggregate metrics than the peaking EQ (dominance 33.9 vs 49.5 dB, mean partials 2.53 vs 1.90), slightly wider gap in the single steady window. Same detector limitation applies."
+}

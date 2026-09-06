@@ -177,7 +177,45 @@ winner-takes-all. This is the "before" every later result is compared against.
 a new one by its growth rate while it is still well below the incumbent — not after it has
 already won.
 
-### M3 — one adaptive cell · *the design Abel asked for*
+### M3 — one adaptive cell · *the design Abel asked for* — **PASSED 2026-09-06**
+
+Built in SuperCollider instead of Python (`sc/gen1_cell.scd`), on Abel's instruction.
+Run unattended. Results, all four takes logged in `logs/2026-09-06/`:
+
+**The baseline.** The loop reaches unity at master gain ≈0.30 and locks on **G4, 392.5 Hz,
+stable to 0.4 cents**. The next partial is **25.7 dB down**. Mean partials 1.94, and at the
+10th percentile exactly **one**. That is winner-takes-all, measured.
+
+**With one cell, target −24 dB.** Same gain, same 8-second window:
+
+| | loudest | runner-up | gap | dominance | mean partials | sustained |
+|---|---|---|---|---|---|---|
+| bypassed | G4 | G5 −25.7 | **25.7 dB** | 55.9 dB | 1.94 | 0.41 |
+| peaking EQ | D4 | G4 −2.8 | **2.8 dB** | 49.5 dB | 1.90 | 0.67 |
+| band-reject | D4 | G4 −7.2 | **7.2 dB** | **33.9 dB** | **2.53** | 0.65 |
+
+D4 rose about 23 dB and now coexists with G4. **The feedback did not die — it sustains
+more** (0.41 → 0.67), which rules out the "too deep" failure mode. The telemetry shows the
+regulator behaving exactly as designed: it held G4 at target with a **steady −4 dB** cut for
+twelve seconds, applying the minimum reduction that did the job rather than a fixed depth.
+
+The band-reject shape Abel asked for beats the peaking EQ on the aggregate metrics, which
+was not the expected result — the ground rules make the peaking EQ the default. Worth a
+proper A/B before either is made the default.
+
+**The defect this run exposed, which matters more than the pass.** The detector is
+`Pitch.kr`, autocorrelation pitch tracking. It is fine while exactly one partial is
+running away, and it breaks *precisely when the cell starts working*: in the two-partial
+regime the real energy is at 293.5 and 392.5 Hz, and the tracker reports **~330 Hz, where
+there is no energy at all**. The cell then regulates nothing. So the improved two-partial
+state is a resting point the loop happened to find, not a state the cell is actively
+holding. Pitch detection finds a fundamental; we need the *dominant partial*, which is a
+different question. Replacing it with the FFT peak picking of §6.1 is now the first task
+of M4 — and that is what the multi-cell allocator needs anyway.
+
+---
+
+Original specification, for reference:
 
 One cell, bound to the dominant partial:
 

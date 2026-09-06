@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "run_name": "m1-baseline-gain-002",
+  "provenance": {
+    "git_commit": "18500c0",
+    "git_dirty": false,
+    "rig_profile_sha256": "81047acc7a268b5e4fe42f70f3e46059cbab310b984efcdd6ecce5c8e2960268",
+    "rig_profile_version": 0,
+    "recorded_at": "2026-09-06T19:01:30.668388+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit-Mach-O"
+  },
+  "params": {
+    "bypass": 1,
+    "gain_end": 0.02,
+    "ramp_s": 20,
+    "seconds": 30,
+    "sample_rate": 48000,
+    "block_size": 128,
+    "ceiling": 0.7,
+    "engine": "supercollider",
+    "patch": "sc/gen1_cell.scd",
+    "telemetry": "logs/2026-09-06/gen1_base_002.wav.telemetry.csv"
+  },
+  "metrics": {
+    "path": "/Users/abel/Library/Mobile Documents/com~apple~CloudDocs/works coding/bela-feedback-pedal/logs/2026-09-06/gen1_base_002.wav",
+    "duration_s": 31.202666666666666,
+    "sample_rate": 48000,
+    "dominant_hz": 0.0,
+    "dominant_stability_cents": 0.0,
+    "mean_partials": 0.0,
+    "p10_partials": 0.0,
+    "dominance_db": 120.0,
+    "top_partials": [],
+    "feedback_onset_s": null,
+    "sustained_fraction": 0.0
+  },
+  "audio_path": "logs/2026-09-06/gen1_base_002.wav",
+  "notes": "No feedback. Loop stays at the noise floor below master gain 0.02."
+}
