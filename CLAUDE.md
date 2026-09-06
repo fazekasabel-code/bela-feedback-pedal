@@ -25,9 +25,16 @@ constraint in it, change the doc in the same commit and say so.
 1. There is a hard output ceiling in the DSP. **No automatic tuning, parameter search, or
    optimisation process may raise it.** It changes only by an explicit human commit.
 2. Real-loop tests (feedback actually running through the exciter) require Abel to have
-   confirmed the rig is live and that he is present with **a hardware attenuator in reach**.
-   Never start one on your own initiative. On the Mac rig that attenuator is the headphone-2
-   level knob or the power amp's own control — there is no volume pedal (Abel, 2026-09-06).
+   confirmed the rig is live. On the Mac rig the attenuator is the headphone-2 level knob
+   or the power amp's own control — there is no volume pedal (Abel, 2026-09-06).
+   **Unattended runs are permitted on this rig** (Abel, 2026-09-06): he confirmed
+   everything is connected and that the agent may work alone by monitoring the input.
+   That permission rests entirely on rule 8 — only the controlled loop is live — and it
+   raises rather than lowers the bar on the software guards, because with nobody at the
+   knob the ceiling, the watchdog and the mute paths are the *only* things that stop a
+   run. Ramp up from silence every time, never start where the last run finished, and
+   keep the script-level gain cap. Abel's standing permission is not a reason to raise
+   any of those limits.
 3. Real-loop runs are watchdogged: no run continues past its time box. On timeout, mute.
    Abel has accepted sustained unchecked feedback on this rig (2026-09-06), because the
    guitar-amp path is dead and only the exciter loop is live, so the time box is generous
