@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "run_name": "feedback-ramp-signal-75pct",
+  "provenance": {
+    "git_commit": "d35083f",
+    "git_dirty": true,
+    "rig_profile_sha256": "1e84c19bb42eee135232f4f6755c0a6d2eab45ebf27c08dba254301a50fa0256",
+    "rig_profile_version": 2,
+    "recorded_at": "2026-09-12T00:48:13.131806+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit"
+  },
+  "params": {
+    "phase": "Phase 1 feedback threshold",
+    "bela_project": "feedback-ramp",
+    "output_ceiling": 0.5,
+    "watchdog_timeout_s": 120.0,
+    "fade_in_s": 0.2,
+    "ramp_duration_s": 60.0,
+    "dayton_dta120_setting": "75%",
+    "m4_preamp_setting": "10:30-10:45 clock position",
+    "note": "Signal excitation (Abel playing throughout) -- loop gain ramped 0->1 over 60s, held at 1 until the watchdog auto-muted at exactly 120s (first real hardware validation of the watchdog path). A narrowband component at ~236.9 Hz recurs persistently from roughly g=0.6 onward through the rest of the take, at levels (-20 to -50 dB) not obviously tracking playing dynamics alone -- consistent with the loop approaching/crossing unity in that region, but NOT confirmed as self-sustaining feedback (Abel was playing continuously, so a played note/resonance at a similar pitch cannot be ruled out from this recording alone). Candidate frequency logged for future reference, not a confirmed measured threshold."
+  },
+  "metrics": {
+    "partial_count": 13.812253175365568,
+    "partial_count_p10": 5.0,
+    "dominance_ratio_db": 1.29919798163203,
+    "peak_flatness": 0.18413890529240484,
+    "sustain_fraction": 0.8821618567864037,
+    "alive_at_end": true,
+    "mode_switch_rate_hz": 48.66977365513929,
+    "peak_sample": 0.5,
+    "duration_s": 123.34439909297052,
+    "frames_analysed": 21241
+  },
+  "audio_path": "/Users/abel/Library/Mobile Documents/com~apple~CloudDocs/works coding/logs/2026-09-12/feedback_ramp_signal_75pct_outputs.wav",
+  "notes": "raw input recording: ../logs/2026-09-12/feedback_ramp_signal_75pct_inputs.wav. Candidate feedback frequency: ~236.9 Hz, unconfirmed -- needs a play-then-release test to confirm self-sustain."
+}

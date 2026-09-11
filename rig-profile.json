@@ -54,9 +54,13 @@
     "callback_headroom": null
   },
   "gain_staging": {
-    "split_point": "M4 (buffered instrument input, direct out) into Bela Gem audio in",
+    "split_point": "M4 instrument input (buffered) -> M4 headphone out -> Bela Gem audio in",
+    "_split_point_note": "Corrected 2026-09-12: the M4 feeds Bela via its HEADPHONE OUT, not a dedicated line/direct out as earlier notes assumed. That gives two independent M4-side gain stages, not one.",
+    "m4_preamp_gain_setting": "10:30-10:45 clock position (Abel's more precise reading than the eyeballed percentage; landed there via 0% -> 25% -> 60% (clipped) -> 35% -> 50% -> ~44% -> nudged down slightly)",
+    "m4_headphone_out_level": "50% -- FIXED, will not be moved while staging the preamp (Abel, 2026-09-12). Once M4 is confirmed working as a buffer, this is not revisited casually.",
+    "_m4_note": "Two independent gain stages on the M4 alone, both upstream of Bela: the instrument-input preamp (staged live 2026-09-12 against the -12 dBFS peak target below, see pickup_into_board_peak_dbfs) and the headphone-out level feeding Bela in (fixed at 50%, held constant during preamp staging on purpose -- moving both at once would make the preamp reading meaningless). Topology: guitar -> M4 preamp -> M4 headphone out -> Bela in -> DSP -> Bela out -> Dayton DTA120 -> exciter. Guitar and buffer are both still expected to change before the rig is final (Abel) -- this setting is real but provisional, update rather than treat as permanent.",
     "board_input_gain_setting": null,
-    "pickup_into_board_peak_dbfs": null,
+    "pickup_into_board_peak_dbfs": "-8 to -14 dBFS on normal strumming, measured live 2026-09-12 with bela/io-check-input/ (output-silent diagnostic) -- centred almost exactly on target, natural playing dynamics vary within that band",
     "_target": "about -12 dBFS peak on normal playing, so feedback growth has room before clipping",
     "dsp_output_ceiling": 0.7,
     "_ceiling_note": "A safety constant in code. No tuning process may raise it (ground rule 1). It must be reviewed for the Gem's actual output level and sample rate by an EXPLICIT human commit before the first live loop - not silently, not by an optimiser. Code is the authority; this is for the log only.",
@@ -88,7 +92,9 @@
     "first_partial_hz": null,
     "candidate_frequencies_hz": [],
     "transfer_function_measurement": null,
-    "_note": "First feedback heard on this platform 2026-09-11, during the bela/gen1-passthrough/ smoke test, with the DTA120 turned up above its 12-o'clock setting -- not measured or recorded (no frequency, no gain value), just confirmed audible by Abel. Everything below is still null pending an actual Phase 1 session: ramp the DTA120 from silence, find where it sustains, measure the unity-gain setting properly instead of relying on this anecdote."
+    "_retracted_236.9hz_note": "RETRACTED 2026-09-12. The 236.9 Hz seen in logs/2026-09-12/004813_feedback-ramp-signal-75pct.json was NOT the software loop-gain ramp reaching threshold -- Abel confirmed he heard no feedback developing during that take and manually cranked the DTA120 knob to 100% for short periods himself, which is what coincided with that energy. A hardware gain change during a run this project's ramp is supposed to be the only variable in is exactly the kind of confound ground rule 10 (one variable at a time) exists to prevent. The log record's audio/metrics are left untouched as an honest record of what was actually captured (confound included); this note is the correction to how it was being interpreted. Do not treat 236.9 Hz as a real candidate.",
+    "_ramp_measurements_2026-09-12": "Via bela/feedback-ramp/ (software loop-gain ramped 0->1 over 60s at a fixed DTA120/M4 setting, held at 1 after, watchdog auto-mutes at 120s -- confirmed working both times this was run to completion). DTA120=50%, silence -- flat -80 to -85 dBFS through a full 50s hold at loop-gain=1, no growth (logs/2026-09-12/004402_feedback-ramp-silence.json). DTA120=75%, Abel playing + confounded by a manual mid-run DTA120 change -- retracted, see above. DTA120=100% (maximum), silence, clean/unconfounded -- flat -78 to -80 dBFS through the full 60s hold at loop-gain=1, no growth (logs/2026-09-12/005304_feedback-ramp-silence-100pct.json). DEFINITIVE: ambient/electrical noise alone does not cross unity at any DTA120 setting with the current M4/Bela gain staging -- ruled out as a silence-excitation risk at this staging. Still open: the same clean methodology (fixed DTA120, no mid-run changes) with Abel playing throughout, which is what actually produced audible feedback back on 2026-09-11.",
+    "_note": "First feedback heard on this platform 2026-09-11, during the bela/gen1-passthrough/ smoke test, with the DTA120 turned up above its 12-o'clock setting -- not measured or recorded (no frequency, no gain value), just confirmed audible by Abel, and consistent with the finding above that it takes real playing, not silence, to excite this loop at these settings. unity_gain_master_setting and transfer_function_measurement are still null pending a clean confirmed threshold from a signal-excitation run."
   },
   "control": {
     "regulation_depth_source": null,

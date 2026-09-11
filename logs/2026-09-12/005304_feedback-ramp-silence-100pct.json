@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "run_name": "feedback-ramp-silence-100pct",
+  "provenance": {
+    "git_commit": "d35083f",
+    "git_dirty": true,
+    "rig_profile_sha256": "94bcb1f43bb338334b043394c4a4c7ce1c0a1470088c1b33e5fd1ce6cd78cbf9",
+    "rig_profile_version": 2,
+    "recorded_at": "2026-09-12T00:53:04.380423+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit"
+  },
+  "params": {
+    "phase": "Phase 1 feedback threshold",
+    "bela_project": "feedback-ramp",
+    "output_ceiling": 0.5,
+    "watchdog_timeout_s": 120.0,
+    "fade_in_s": 0.2,
+    "ramp_duration_s": 60.0,
+    "dayton_dta120_setting": "100%",
+    "m4_preamp_setting": "10:30-10:45 clock position",
+    "note": "Silence excitation (no playing, no manual knob changes during the run -- clean, unconfounded). Loop gain ramped 0->1 over 60s, held at 1 until the watchdog auto-muted at exactly 120s. RMS stayed flat -78 to -80 dBFS through the entire 60s hold at loop-gain=1 -- NO feedback growth at all, even at Dayton=100% (maximum) and fully open software passthrough. Definitive: at current M4/Bela gain staging, ambient/electrical noise alone never crosses unity regardless of DTA120 setting."
+  },
+  "metrics": {
+    "partial_count": 139.06915887850468,
+    "partial_count_p10": 128.0,
+    "dominance_ratio_db": -6.55560386518645,
+    "peak_flatness": 0.5118459332932761,
+    "sustain_fraction": 0.10197080013723173,
+    "alive_at_end": false,
+    "mode_switch_rate_hz": 117.91340537383176,
+    "peak_sample": 0.02410888671875,
+    "duration_s": 152.32290249433106,
+    "frames_analysed": 26233
+  },
+  "audio_path": "/Users/abel/Library/Mobile Documents/com~apple~CloudDocs/works coding/logs/2026-09-12/feedback_ramp_silence_100pct_outputs.wav",
+  "notes": "raw input recording: ../logs/2026-09-12/feedback_ramp_silence_100pct_inputs.wav"
+}
