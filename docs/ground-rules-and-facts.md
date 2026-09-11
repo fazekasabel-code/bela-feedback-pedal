@@ -109,8 +109,28 @@ exact board — do not proceed past bring-up on the assumed values:
 
 1. Audio input impedance, and whether a passive pickup needs a buffer in front (§4.1).
 2. Analog-input full-scale voltage, and how a 3.3 V-fed expression pedal maps into it (§4.3).
-3. Whether `scripts/deploy.sh`, **pybela** and the **`Watcher`** library work as expected on
-   this board and IDE, or need replacing.
+3. ~~Whether `scripts/deploy.sh`, **pybela** and the **`Watcher`** library work as expected
+   on this board and IDE, or need replacing.~~ **Resolved 2026-09-11, with caveats.**
+   `build_project.sh`/`stop_running.sh` run fine directly on the board (`scripts/deploy.sh`'s
+   own host-side path is still untried). Watcher/pybela streaming works end to end
+   (`bela/watcher-check/` + `host/rig/watcher_check.py`), but neither is drop-in:
+   - `Watcher.h`/`Watcher.cpp` are **not** part of Bela core — pybela's own docs say so —
+     and had to be vendored into the project folder from the `watcher` submodule of
+     `github.com/BelaPlatform/pybela` (commit 60a09e0). Two lines had to be added to make
+     that 2023-era code compile against this board's Bela (`master`, not the `dev` branch
+     pybela's docs call for): `#include <array>`, and `#include <Bela.h>` moved *before*
+     `#include <Watcher.h>` (the tutorial's own ordering leaves `rt_fprintf` undeclared).
+   - The **`pybela` package on PyPI (0.1.0) is stale** relative to its own GitHub source
+     (2.0.3): it checks `ws.open`, a `websockets` API that no longer exists in current
+     `websockets` releases, so every connection attempt raised `AttributeError` inside an
+     asyncio task and hung with no visible error. `host/rig/watcher_check.py` carries a
+     small compat shim (patches `.open` back onto the installed `websockets` class) rather
+     than fighting a `pip install` from GitHub, which silently failed in this environment.
+   - Needs **Python ≤3.12** on the host — `pybela`'s `jupyter-bokeh` dependency doesn't
+     build on 3.13 (`pipes` module removed). `host/.venv` is 3.11.
+   - Each Bela-side program run accepts **one streaming client for its lifetime**; there's
+     no reconnect after a client disconnects mid-session without restarting the Bela
+     program. Plan the host harness around that.
 4. Line-out vs headphone-out level, and which of the two feeds the power amp → exciter chain.
 5. Real round-trip latency at the block size actually used, and the resulting comb spacing.
 6. CPU headroom for STFT + Goertzel bank + N biquads, and the inter-thread pattern the Bela

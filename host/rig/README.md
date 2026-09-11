@@ -1,5 +1,15 @@
 # Rig I/O bring-up (Phase M0)
 
+> **2026-09-11:** everything below this line is the Mac + Scarlett-era tool (`io_check.py`,
+> `sounddevice`/PortAudio) and hasn't been revisited for the Gem yet — a Bela-Gem equivalent
+> is still open (phase-plan.md Phase 0/1). `watcher_check.py` is new and separate: a Phase 1
+> instrumentation smoke test confirming pybela/Watcher streaming works on the Gem (see
+> ground-rules-and-facts.md §3.1). Run it against a board running `bela/watcher-check/`:
+>
+> ```bash
+> python3 -m rig.watcher_check
+> ```
+
 Amp OFF for every command that opens an output. Run from `host/`:
 
 ```bash

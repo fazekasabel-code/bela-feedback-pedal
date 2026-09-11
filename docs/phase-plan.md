@@ -41,8 +41,8 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 
 **Instrumentation first** — build it before the measurements, so the measurements are captured automatically:
 
-- Integrate Bela's `Watcher` library and **pybela** (websocket streaming, logging, monitoring and control of variables between the board and Python). This is the agent's eyes: it can stream out internal state (detected peaks, per-cell frequency and gain reduction, input/output RMS) and push in parameter changes without recompiling. Confirm both work with the Gem's IDE (ground-rules §3.1, open question 3) — if the streaming path has moved, this is where that is found out.
-- Host harness: run a test, stream the variables, record the audio, compute the §9 proxy metrics, write one log record.
+- Integrate Bela's `Watcher` library and **pybela** (websocket streaming, logging, monitoring and control of variables between the board and Python). This is the agent's eyes: it can stream out internal state (detected peaks, per-cell frequency and gain reduction, input/output RMS) and push in parameter changes without recompiling. **Confirmed working end to end, 2026-09-11** (ground-rules §3.1, open question 3, resolved with caveats): `bela/watcher-check/` streams `audio_in_ch0`/`audio_in_ch1` at audio rate; `host/rig/watcher_check.py` connected, streamed 2000 values per channel, and read back real (near-silent, no signal playing) input levels. Getting there needed vendoring `Watcher.h`/`.cpp` (not core Bela), two small compile fixes for this board's toolchain, a compat shim for a stale PyPI `pybela` release, and Python ≤3.12 on the host — see ground-rules §3.1 for the details, they'll matter for every project that uses Watcher from here on.
+- Host harness: run a test, stream the variables, record the audio, compute the §9 proxy metrics, write one log record. `host/rig/watcher_check.py` is the first sliver of this — streaming confirmed, but it doesn't yet record audio, compute metrics, or write a log record itself.
 
 **Then measure the rig:**
 

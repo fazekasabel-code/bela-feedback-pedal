@@ -1,9 +1,15 @@
+# Needs Python <=3.12 -- pybela's jupyter-bokeh dependency doesn't build on 3.13
+# (the `pipes` module it imports was removed). host/.venv is 3.11.
+
 numpy>=1.24
 scipy>=1.10
 soundfile>=0.12
 sounddevice>=0.5      # PortAudio bindings, used by the host-side dev tools in rig/
 
 # pybela — streaming/logging/monitoring of Bela variables from Python.
-# Needed from Phase 1 on Bela Gem: Watcher on the board, Streamer here. Unverified
-# on the Gem's new IDE (ground-rules 3.1, open question 3) — confirm before relying on it.
-# pybela>=0.1
+# Confirmed working on the Gem 2026-09-11 (ground-rules 3.1, open question 3), but the
+# PyPI release (0.1.0) is stale relative to its own GitHub source (2.0.3) and checks a
+# `websockets` API that no longer exists -- host/rig/watcher_check.py carries a compat
+# shim to patch around it rather than depending on an editable/git install. See
+# ground-rules 3.1 for the rest of what it took to get this far.
+pybela>=0.1
