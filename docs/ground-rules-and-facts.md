@@ -201,9 +201,9 @@ foot control of loop gain per §8) and would then resume the role.
   previous session's level. Loop gain itself is presently whatever the DTA120's gain control
   is set to — fixed once chosen, never touched mid-session (ground rule 10.5).
 - **Abel present for every real-loop run** (ground rule 10.1) still holds. Presence is no
-  longer "a foot on a pedal"; it means a person is there to judge the take, and to cut power
-  to the DTA120 or pull a cable by hand if he ever wants to — available, not a required
-  interlock.
+  longer "a foot on a pedal"; it means a person is there to judge the take, and the DTA120's
+  own power switch is a trivial, always-reachable manual backstop (Abel, 2026-09-11) —
+  available, not a required interlock.
 
 **This reasoning lapses the moment either fact above stops being true.** If a live guitar
 amp or PA is ever introduced (§2.3, Phase 7), or anything is added between Bela out and the

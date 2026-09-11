@@ -46,8 +46,10 @@ constraint in it, change the doc in the same commit and say so.
    for the full reasoning — no separate uncontrolled acoustic loop exists in this build (rule
    8), and the controlled loop's worst case through the DTA120 + exciter is judged safe even
    at full runaway ("the signal explodes"). Rules 1, 3 and 4 are the safety net instead, and
-   they do not become optional because of this. If a hardware kill (e.g. a volume pedal) is
-   ever added to this chain, name it here and it becomes mandatory again.
+   they do not become optional because of this. The DTA120's own power switch is a trivial,
+   always-reachable manual backstop (Abel, 2026-09-11) — available, not a required
+   interlock. If a hardware kill (e.g. a volume pedal) is ever added to this chain, name it
+   here and it becomes mandatory again.
 7. No monitoring mix or hardware passthrough on the Bela may feed the audio input back to
    the output outside the DSP — that closes an analog loop the DSP cannot see or mute.
    Check every session.
