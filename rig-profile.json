@@ -61,8 +61,8 @@
     "dsp_output_ceiling": 0.7,
     "_ceiling_note": "A safety constant in code. No tuning process may raise it (ground rule 1). It must be reviewed for the Gem's actual output level and sample rate by an EXPLICIT human commit before the first live loop - not silently, not by an optimiser. Code is the authority; this is for the log only.",
     "power_amp_model": "Dayton Audio DTA120",
-    "power_amp_gain_setting": null,
-    "_amp_note": "Fixed constant once set. Never a variable under test. Wired straight from Bela audio out to the exciter -- no pedal or other device in between (ground-rules 4.5)."
+    "power_amp_gain_setting": "12 o'clock (50% of full rotation)",
+    "_amp_note": "Fixed constant once set. Never a variable under test. Wired straight from Bela audio out to the exciter -- no pedal or other device in between (ground-rules 4.5). Set 2026-09-11 (Abel): raw passthrough (bela/gen1-passthrough/) produced audible feedback when the DTA120 gain was turned up; backed off to 12 o'clock, which Abel expects to be the testing point. Not yet a hard-measured unity-gain threshold (see 'loop' below) -- a qualitative listening observation, written down per ground rule 10.5 so it isn't touched as a variable under test."
   },
   "safety": {
     "designated_hardware_kill": "none required -- DTA120 power switch available as a manual backstop (Abel, 2026-09-11)",
@@ -88,7 +88,7 @@
     "first_partial_hz": null,
     "candidate_frequencies_hz": [],
     "transfer_function_measurement": null,
-    "_note": "All null - nothing has fed back on this platform yet."
+    "_note": "First feedback heard on this platform 2026-09-11, during the bela/gen1-passthrough/ smoke test, with the DTA120 turned up above its 12-o'clock setting -- not measured or recorded (no frequency, no gain value), just confirmed audible by Abel. Everything below is still null pending an actual Phase 1 session: ramp the DTA120 from silence, find where it sustains, measure the unity-gain setting properly instead of relying on this anecdote."
   },
   "control": {
     "regulation_depth_source": null,
