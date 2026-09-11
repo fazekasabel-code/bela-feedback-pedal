@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "run_name": "detector-passthrough-check",
+  "provenance": {
+    "git_commit": "b962dd5",
+    "git_dirty": true,
+    "rig_profile_sha256": "9eca46071cb1ac222c34597260f8a3780b4d88094830e73acf406e3c7653ba66",
+    "rig_profile_version": 2,
+    "recorded_at": "2026-09-12T00:13:19.666681+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit"
+  },
+  "params": {
+    "phase": "Phase 3 detection layer",
+    "bela_project": "detector-passthrough",
+    "output_ceiling": 0.5,
+    "watchdog_timeout_s": 120.0,
+    "fade_in_s": 0.2,
+    "analysis_window": 2048,
+    "analysis_hop": 256,
+    "arm_growth_db_per_frame": 0.8,
+    "prominence_db_cpp_cheap_shoulder": 25.0,
+    "note": "Hardware validation run for the Phase 3 growth-rate detector (bela/detector-passthrough/). Gain cells at unity -- actuator disabled by design. armed_count confirmed 0 throughout via live pybela streaming during the run (no false arming on real ambient room noise) -- this followed fixing a real bug the same day: the cheap local-shoulder prominence proxy at 6 dB (matching the Python reference) false-armed 150-230 of 1025 bins continuously on a real quiet recording; found and fixed offline before this run by raising it to 25 dB, revalidated against the same recording and against the synthetic fast-jump test with no change in detection latency. No genuine feedback jump has been captured on any rig yet, so the actual Phase 3 exit criterion (ms from a real jump to a growth-rate flag) remains open -- see host/harness/detector.py and host/tests/test_detector.py for the synthetic validation that does exist (sub-50ms arm latency at 500 dB/s growth, no false arms on stationary signal or noise floor)."
+  },
+  "metrics": {
+    "partial_count": 141.08586883029074,
+    "partial_count_p10": 131.0,
+    "dominance_ratio_db": -7.377653689032968,
+    "peak_flatness": 0.5401470831019942,
+    "sustain_fraction": 0.23850991775520078,
+    "alive_at_end": false,
+    "mode_switch_rate_hz": 125.20997084178498,
+    "peak_sample": 0.0245208740234375,
+    "duration_s": 36.03736961451247,
+    "frames_analysed": 6201
+  },
+  "audio_path": "/Users/abel/Library/Mobile Documents/com~apple~CloudDocs/works coding/logs/2026-09-12/detector_check_outputs.wav",
+  "notes": "raw input recording: ../logs/2026-09-12/detector_check_inputs.wav"
+}

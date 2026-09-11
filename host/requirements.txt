@@ -5,6 +5,7 @@ numpy>=1.24
 scipy>=1.10
 soundfile>=0.12
 sounddevice>=0.5      # PortAudio bindings, used by the host-side dev tools in rig/
+pytest>=7.0            # tests/ -- was undeclared even though the README always assumed it
 
 # pybela — streaming/logging/monitoring of Bela variables from Python.
 # Confirmed working on the Gem 2026-09-11 (ground-rules 3.1, open question 3), but the
