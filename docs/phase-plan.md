@@ -42,17 +42,17 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 **Instrumentation first** — build it before the measurements, so the measurements are captured automatically:
 
 - Integrate Bela's `Watcher` library and **pybela** (websocket streaming, logging, monitoring and control of variables between the board and Python). This is the agent's eyes: it can stream out internal state (detected peaks, per-cell frequency and gain reduction, input/output RMS) and push in parameter changes without recompiling. **Confirmed working end to end, 2026-09-11** (ground-rules §3.1, open question 3, resolved with caveats): `bela/watcher-check/` streams `audio_in_ch0`/`audio_in_ch1` at audio rate; `host/rig/watcher_check.py` connected, streamed 2000 values per channel, and read back real (near-silent, no signal playing) input levels. Getting there needed vendoring `Watcher.h`/`.cpp` (not core Bela), two small compile fixes for this board's toolchain, a compat shim for a stale PyPI `pybela` release, and Python ≤3.12 on the host — see ground-rules §3.1 for the details, they'll matter for every project that uses Watcher from here on.
-- Host harness: run a test, stream the variables, record the audio, compute the §9 proxy metrics, write one log record. `host/rig/watcher_check.py` is the first sliver of this — streaming confirmed, but it doesn't yet record audio, compute metrics, or write a log record itself.
+- Host harness: run a test, stream the variables, record the audio, compute the §9 proxy metrics, write one log record. **Built, 2026-09-11** — `bela/harness-passthrough/` (records) + `host/rig/harness_run.py` (deploy, run, fetch, score, log) produced a real end-to-end record (`logs/2026-09-11/233408_first-take.json`).
 
 **Then measure the rig:**
 
 1. Round-trip audio latency at the chosen block size; CPU load headroom.
-2. Gain staging: pickup level into Bela (target ~-12 dBFS peak on normal playing), Bela out straight into the power amp (Dayton DTA120) — no pedal in between in this build, see ground-rules §4.5 — then **fix the power amp gain permanently and write it down**.
+2. Gain staging: pickup level into Bela (target ~-12 dBFS peak on normal playing), Bela out straight into the power amp (Dayton DTA120) — no pedal in between in this build, see ground-rules §4.5 — then **fix the power amp gain permanently and write it down**. **M4 preamp staged live, 2026-09-12** — 10:30-10:45 clock position, ‑8 to ‑14 dBFS peak on normal playing, right on target; see `rig-profile.json` `gain_staging`. Trusted. Power amp (DTA120) gain is not yet fixed — see item 5.
 3. **Exciter→body→pickup transfer function** by swept sine at low level. This is the loop's gain landscape and it produces the ranked candidate list of §7.3.
 4. Partial map for the tuning(s) in use.
-5. Feedback threshold: volume-pedal position at which the loop reaches unity, and how far above unity it goes at typical settings.
+5. Feedback threshold: volume-pedal position at which the loop reaches unity, and how far above unity it goes at typical settings. **Attempted and DISTRUSTED, 2026-09-12** — `bela/feedback-ramp/` (a software loop-gain ramp standing in for the missing pedal) found zero feedback growth from silence at any DTA120 setting including 100%, which flatly contradicts real feedback Abel heard on 2026-09-11 at DTA120>50%. That contradiction is the finding, not the null result — Abel is checking cables/connections before this is trusted again. Re-measure fresh once the rig is verified; see `rig-profile.json` `loop._distrusted_2026-09-12`.
 6. Expression pedal: pot value, taper, TRS convention, heel/toe endpoints as read by the ADC — calibrate and store these, never assume a range.
-7. Baseline recording: **the rig with no regulation at all**, feeding back at several volume-pedal positions. This is the "before" that every later result is compared against, and it is what winner-takes-all looks like in the metrics.
+7. Baseline recording: **the rig with no regulation at all**, feeding back at several volume-pedal positions. This is the "before" that every later result is compared against, and it is what winner-takes-all looks like in the metrics. Blocked on item 5.
 
 **Exit:** `rig-profile.json` v1 exists, is committed, and the harness can compute all §9 metrics from a recorded take automatically.
 
