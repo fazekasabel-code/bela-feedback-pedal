@@ -1,19 +1,9 @@
 # Gen1 Feedback Regulator — Ground Rules & Facts
 
 **Project:** Lithopaedion / Feedback Unbound DSP pedal, generation 1
-**Platform:** Bela Cape + BeagleBone Black
-**Owner:** Abel Fazekas · **Status:** pre-bring-up, drafted 2026-09-05
+**Platform:** Bela Gem Stereo (Starter Kit, PocketBeagle 2 base) — see §3.1.
+**Owner:** Abel Fazekas · **Status:** pre-bring-up. Board on hand since 2026-09-10, not yet set up.
 **Purpose of this doc:** the shared, stable reference every later decision and every agent session is checked against. Facts here are either measured, cited, or explicitly marked as assumptions to be tested. Nothing downstream should silently contradict it.
-
-
-> **Amendment, 2026-09-06 — the platform changed.** The Bela cannot be connected, so gen1
-> is being built first on a **Mac host with a Focusrite Scarlett 8i6**. The physics (§5),
-> the DSP architecture (§6), the jump analysis (§7), the control-surface reasoning (§8) and
-> the proxy metrics (§9) are platform-independent and stand unchanged. The parts that are
-> platform-specific are amended in place: **§3.3** (the Mac rig's hardware facts) and
-> **§4.6** (the fail-safe on a rig with no volume pedal at heel). The sequence of work now
-> lives in [`mac-rig-plan.md`](mac-rig-plan.md); [`phase-plan.md`](phase-plan.md) is the
-> Bela plan, kept for when the board comes back.
 
 ---
 
@@ -38,17 +28,15 @@
 
 ```
                        ┌──────────► [ effects ] ──► [ GUITAR AMP ]   ← acoustic output
-                       │                                   ╎
-   GUITAR ──► [ buffered split ]                           ╎ (uncontrolled
-                       │                                   ╎  acoustic loop —
-                       │                                   ╎  see §2.3)
+                       │                                   ╎          NOT WIRED in this
+   GUITAR ──► [ M4, buffered direct out ]                  ╎          build — see §2.3
+                       │                                   ╎  (uncontrolled
+                       │                                   ╎   acoustic loop)
                        └──► [ BELA in ] ──► DSP ──► [ BELA out ]
                                                         │
-                                              [ volume pedal ]  ← loop gain (foot)
+                                             [ power amp: Dayton DTA120 ]
                                                         │
-                                             [ small power amp ]
-                                                        │
-                                              [ EXCITER on body ]
+                                              [ EXCITER: Dayton, on body ]
                                                         │
                                         body ──► strings ──► pickup ──┐
                                                                       │
@@ -58,12 +46,16 @@
         [ expression pedal ] ──► Bela analog in 0   ← regulation depth (foot)
 ```
 
+As actually wired (2026-09-11) there is no volume pedal and no other device between Bela
+out and the power amp — see §4.5 for why that's a considered decision, not a gap. Loop gain
+is presently whatever the DTA120's own gain control is set to, fixed per ground rule 10.5.
+
 ### 2.1 The two chains are not symmetric
 
 Only one of them is a loop.
 
-- **Amplification chain** (guitar → effects → amp) is an *output*. It does not close a loop through the DSP.
-- **Feedback chain** (pickup → Bela → volume pedal → power amp → exciter → body → strings → pickup) is the **controlled loop**. This is the only loop the pedal governs. Everything gen1 does happens inside it.
+- **Amplification chain** (guitar → effects → amp) is an *output*. It does not close a loop through the DSP. In this build it is not wired at all (§2.3).
+- **Feedback chain** (pickup → M4 → Bela → DSP → Bela out → power amp (Dayton DTA120) → exciter (Dayton) → body → strings → pickup) is the **controlled loop**. This is the only loop that is live at all. Everything gen1 does happens inside it.
 
 ### 2.2 Split point: before or after the effects
 
@@ -80,87 +72,90 @@ Both are electrically viable. They are not musically equivalent.
 
 ### 2.3 The amp is a second, uncontrolled loop
 
-At stage volume, the amp's acoustic output excites the guitar body and strings directly. That is a real feedback loop, it is *not* under the pedal's control, and it has exactly the winner-takes-all character gen1 is trying to defeat. It will mask or undo the regulator's work.
+At stage volume, an amp's acoustic output excites the guitar body and strings directly. That is a real feedback loop, it is *not* under the pedal's control, and it has exactly the winner-takes-all character gen1 is trying to defeat. It will mask or undo the regulator's work.
 
-**Ground rule for all development and measurement:** the amp is silent, on headphones, or in another room. The only loop that is live during testing is the controlled one. Amp volume is reintroduced as a deliberate, late-phase variable, never as an uncontrolled background condition.
+**As actually built (2026-09-11): this loop does not exist.** The guitar goes only into the M4's buffered instrument input and from there to the Bela; there is no live guitar amp or PA anywhere in the signal path. This isn't the amp being kept silent by discipline — it simply isn't wired. That is what §4.5's fail-safe reasoning leans on.
+
+**Ground rule for all development and measurement, unchanged for if/when this returns:** the amp is silent, on headphones, or in another room. The only loop that is live during testing is the controlled one. Amp volume is reintroduced as a deliberate, late-phase variable (Phase 7), never as an uncontrolled background condition — and the moment it is reintroduced, §4.5's "no hardware kill needed" reasoning must be revisited.
 
 ---
 
 ## 3. Hardware facts
 
-### 3.1 Bela Cape + BeagleBone Black (verified against Bela docs)
+### 3.1 Bela Gem Stereo
+
+From the published spec (bela.io, learn.bela.io, shop.bela.io — see Sources). **Nothing in
+this table is measured on Abel's unit yet** — Phase 0 does that, and until it does, every
+number here is a starting assumption, not a fact.
 
 | | |
 |---|---|
-| Audio in / out | 2 in, 2 out — 16-bit, 44.1 kHz |
-| Audio input full scale | **1.8 Vpp**, AC-coupled |
-| Headphone output | 2.6 Vpp, AC-coupled |
-| Input gain available | up to 59.5 dB |
-| Audio input impedance | **~20 kΩ / 80 kΩ at the ADC** — see §4.1, this is the single most important electrical gotcha |
-| Analog in | 8 channels, 16-bit, **0–4.096 V** (5 V tolerant), 22.05 kHz default; configurable to 4 ch @ 44.1 kHz or 2 ch @ 88.2 kHz. Mapped to 0–1 in software |
-| Analog out | 8 channels, 16-bit, 0–5 V, mapped 0–1 |
+| Base board | PocketBeagle 2 — **multi-core** |
+| Audio in / out | 2 in, 2 out — up to **24-bit, 96 kHz**. Stereo line in; **differential line out + headphone out** |
+| Round-trip latency | **Sub-millisecond** (spec). Measure electrically in Phase 0 and treat that number as the fact; it sets the phase-condition comb spacing (§11) |
+| Audio input full scale | TBC |
+| Audio input impedance / buffer need | **Unknown.** §4.1's buffered-split rule stays in force until measured |
+| Analog in | 8 channels, 16-bit, ~22–24 kHz, DC-coupled. Voltage range **TBC** |
+| Analog out | **None.** `analogWrite()` is not available on Gem. Not used by gen1 anyway (§2.1) |
 | Digital I/O | 16 pins, 3.3 V logic |
-| Onboard speaker amps | 2 × 1.1 W into 8 Ω (not used here — the exciter needs the external power amp) |
-| CPU | AM335x, single-core ARM Cortex-A8 @ 1 GHz, NEON SIMD |
-| Storage | 4 GB eMMC |
-| Network | Ethernet, plus USB gadget networking (default `root@192.168.7.2`) |
+| Connectivity | **USB-C** device port (IDE + gadget networking); USB-A host for WiFi / BT / Ethernet / MIDI; I²C + Qwiic |
+| Storage | microSD (flashed card ships in the starter kit) |
+| Power | 5 V; battery operation supported |
+| IDE / toolchain | Browser IDE (TypeScript/Vue). C++, Pure Data, SuperCollider supported |
+| Kit contents | Bela Gem Stereo board, PocketBeagle 2, flashed microSD, USB-C cable, baseplate, spacers, screws |
 
-**Block size and latency.** Bela's whole selling point is a hard-real-time audio thread with configurable, very small block sizes. The exact round-trip latency of *this* rig is a Phase 1 measurement, not an assumption — see §11.
+**Load-bearing unknowns, to close in Phase 0** by measurement or by the Bela docs for this
+exact board — do not proceed past bring-up on the assumed values:
 
-### 3.2 Rest of the chain (all in hand)
+1. Audio input impedance, and whether a passive pickup needs a buffer in front (§4.1).
+2. Analog-input full-scale voltage, and how a 3.3 V-fed expression pedal maps into it (§4.3).
+3. Whether `scripts/deploy.sh`, **pybela** and the **`Watcher`** library work as expected on
+   this board and IDE, or need replacing.
+4. Line-out vs headphone-out level, and which of the two feeds the power amp → exciter chain.
+5. Real round-trip latency at the block size actually used, and the resulting comb spacing.
+6. CPU headroom for STFT + Goertzel bank + N biquads, and the inter-thread pattern the Bela
+   Gem migration guide calls for on its multi-core base.
+
+### 3.2 Rest of the chain (as actually wired, 2026-09-11)
 
 | Item | Status | Notes to fill in during Phase 1 |
 |---|---|---|
-| Bela Cape + BeagleBone | On hand, **not yet set up** | Needs image, network, toolchain |
-| Exciter (surface transducer) | On hand | Model, impedance, power handling, mounting position on the body |
-| Small power amp | On hand | Model, output power, gain, input sensitivity |
-| Guitar volume pedal (passive) | On hand | Sets loop gain — the master "how much feedback" control |
-| Expression pedal (passive) | On hand | Pot value and TRS wiring convention to be identified — see §4.3 |
-| Guitar | On hand | Which instrument, which tuning, which pickup — all affect the partial map |
+| Bela Gem Stereo (Starter Kit) | On hand from 2026-09-10; SSH bring-up confirmed 2026-09-11 (root@192.168.7.2, key auth, `build_project.sh` runs on-board) | Browser IDE still unchecked |
+| Buffer: **M4** interface, buffered instrument input, direct out | On hand, in the signal path | Satisfies §4.1's buffered-input rule regardless of the Gem's own input impedance |
+| Exciter: **Dayton** surface transducer | On hand, wired straight after the power amp | Exact model, impedance, power handling, mounting position on the body |
+| Power amp: **Dayton DTA120** | On hand, wired straight from Bela audio out to the exciter — **no pedal or other device in between** (§4.5) | Model confirmed; output power, gain, input sensitivity, and the fixed gain setting once chosen (ground rule 10.5) |
+| Guitar volume pedal (passive) | On hand, **not currently in the signal path** | Loop gain is presently fixed by the DTA120's own gain control. Can be reintroduced later for foot control (§8), but is no longer required as a safety interlock — see §4.5 |
+| Expression pedal (passive) | On hand, not yet wired (Phase 6) | Pot value and TRS wiring convention to be identified — see §4.3 |
+| Guitar: **Epiphone, humbucker** | On hand, in use | Which tuning, exact model — affects the partial map |
 
-
-### 3.3 Mac + Scarlett 8i6 rig (the current platform)
-
-The rig gen1 is actually being built on until the Bela is connectable.
-
-| | |
-|---|---|
-| Host | Mac (Apple silicon), CoreAudio |
-| Interface | Focusrite Scarlett 8i6 — reported by CoreAudio as 10 in / 6 out, 48 kHz |
-| Guitar in | **Input 1**, INST / Hi-Z. This satisfies §4.1 in hardware — no external buffer needed |
-| Exciter out | **Outputs 3/4** → power amp → exciter on the guitar body |
-| Block size | 128 frames @ 48 kHz = 2.67 ms, to be confirmed by xrun measurement |
-| Round-trip latency | **Unmeasured.** Expect 5–15 ms, an order of magnitude worse than Bela. Measure electrically by patching an output back to an input. It sets the spacing of the phase-condition comb, and it tightens the §7 jump budget |
-| Analog I/O | **None.** No expression-pedal input. Regulation depth is a MIDI CC or a key until the Bela returns |
-| DSP | Python 3 + `sounddevice` + NumPy/SciPy, in the audio callback. Cell gains updated per block and one-pole smoothed, which sits inside the 1–5 ms attack budget of §6.3 |
-
-Two facts about this interface that are load-bearing and must be verified on the actual
-unit, not assumed:
-
-1. **Outputs 3/4 are fixed-level line outputs.** The front-panel monitor knob is believed
-   to attenuate outputs 1/2 only, which would mean it is *not* a kill switch for the
-   exciter. Verify before relying on it either way.
-2. **Focusrite Control routing.** Outputs 3/4 must be fed from Playback 3/4 alone. If a
-   hardware mix routes Input 1 to outputs 3/4, an analog feedback loop is closed inside the
-   interface — one the DSP cannot see, cannot regulate and cannot mute. Direct Monitor off.
-
-Channel indices are **not** to be taken on trust: confirm by sending a tone to one output
-at a time and observing where it appears.
+**Block size and latency.** Bela's selling point is a hard-real-time audio thread with
+configurable, very small block sizes. The exact round-trip latency of *this* rig is a
+Phase 1 measurement, not an assumption — see §11.
 
 ---
 
 ## 4. Electrical constraints and gotchas
 
-### 4.1 Bela's audio input needs a buffer in front of a passive pickup
+### 4.1 The audio input may need a buffer in front of a passive pickup
 
-The ADC input impedance is roughly 20 kΩ/80 kΩ. A passive guitar pickup driving that will lose high end and level — it is a known limitation, and Bela's own forum recommends adding a buffer stage to raise input impedance.
+**Unverified on the Gem Stereo — see §3.1.** A passive guitar pickup driving a low input
+impedance loses high end and level; it is a known limitation on Bela boards in general, and
+Bela's own forum recommends a buffer stage to raise input impedance where it applies.
 
-**Ground rule:** the feed to Bela is **always buffered**. Either use an active/buffered splitter, or take the Bela feed from a buffered pedal output. Never wire a bare passive pickup straight into the Bela input and then spend a week debugging "the detector is missing the high partials."
+**Ground rule:** until measured, treat the feed to the board as **always buffered**. Either
+use an active/buffered splitter, or take the feed from a buffered pedal output. Never wire a
+bare passive pickup straight in and then spend a week debugging "the detector is missing the
+high partials." **As wired (2026-09-11):** the guitar goes through the M4's buffered
+instrument input, direct out into Bela in — this rule is satisfied regardless of what the
+Gem's own input impedance turns out to be.
 
 ### 4.2 Levels
 
-- Bela audio input full scale is 1.8 Vpp. Gain-stage into that deliberately; there is up to 59.5 dB of input gain available, so aim for a healthy but headroom-preserving level (target ~-12 dBFS peak on normal playing, so feedback growth has room before clipping).
-- The DSP output goes to a passive volume pedal, then a power amp. **The power amp's gain is the loudest link in the chain.** Set it once, write it down, tape it, and never let it be the variable under test.
+- Audio input full scale and available input gain are **TBC** (§3.1). Whatever they turn
+  out to be, gain-stage into them deliberately: aim for a healthy but headroom-preserving
+  level (target ~-12 dBFS peak on normal playing, so feedback growth has room before
+  clipping).
+- The DSP output goes straight to the power amp (Dayton DTA120) — no pedal in between in this build (§4.5). **The power amp's gain is the loudest link in the chain.** Set it once, write it down, tape it, and never let it be the variable under test.
 
 ### 4.3 Expression pedal into an analog input
 
@@ -169,36 +164,50 @@ A passive expression pedal is a potentiometer on a TRS jack. Wiring: **3.3 V →
 Three things to get right:
 
 1. **TRS convention varies by brand** (which of tip/ring is the wiper, and pot taper/value, typically 10 k–25 k). Identify yours with a multimeter before wiring, not after.
-2. **Scaling.** Bela's analog input range is 0–4.096 V but the pedal is fed from the 3.3 V rail, so full travel reads roughly **0 → 0.806**, not 0 → 1. Do not hard-code 0–1. Calibrate heel and toe at startup or store the endpoints in the rig profile and normalise in software.
+2. **Scaling.** The board's analog input full-scale voltage is **TBC** (§3.1) — do not
+   hard-code 0–1 or assume any particular range. Calibrate heel and toe at startup, or store
+   the measured endpoints in the rig profile and normalise in software.
 3. **Protection and smoothing.** A series resistor (~10 kΩ) on the wiper into the analog pin, and a low-pass smoother in software (a one-pole around 10 Hz) — analog inputs are noisy and a jittery control on a feedback regulator is audible.
 
 ### 4.4 Grounding
 
 Two amplifiers, one instrument and a transducer bolted to the guitar is a ground loop waiting to happen, and hum inside a feedback loop is not just hum — it is a partial the regulator will faithfully detect and fight. Plan for it: shared power strip, and be ready to add a transformer isolator on one of the two chains.
 
-### 4.5 Fail-safe
+### 4.5 Fail-safe (revised 2026-09-11 for the rig as actually built)
 
-The rig can produce a lot of acoustic energy on its own initiative.
+The rig can produce a lot of acoustic energy on its own initiative — that has not changed.
+What has changed is the shape of the risk, because of two facts about this specific build:
 
-- **Hardware kill:** the volume pedal at heel. Always reachable. It is the primary safety device.
-- **Software kill:** a hard output ceiling in the DSP that no automatic tuning may raise, and a mute-on-error path (any xrun, NaN, or watchdog timeout ⇒ output muted).
+1. **There is no second, uncontrolled acoustic loop.** Per §2.3, the guitar goes only into
+   the M4 → Bela; nothing feeds a live guitar amp or PA. The failure mode a hardware kill
+   traditionally guards against — a runaway controlled loop *compounding* with an
+   independent acoustic loop through a stage amp — is not wired at all right now.
+2. **Bela audio out feeds the Dayton DTA120 power amp directly into the exciter, with no
+   pedal or other device in between.**
 
+**Ground rule (Abel, 2026-09-11):** given (1) and (2), no dedicated hardware kill switch is
+required in this build. The DTA120 + exciter combination is judged safe by Abel even in a
+full, unmuted runaway ("the signal explodes") — it cannot put out anything that endangers
+Abel, the instrument, or the room. A foot-operable kill is therefore not a required
+interlock here, though one may be reintroduced later (e.g. a volume pedal restored for
+foot control of loop gain per §8) and would then resume the role.
 
-### 4.6 Fail-safe on the Mac rig
+**This does not touch what was never optional:**
 
-§4.5 names the volume pedal at heel as the primary hardware kill. On the Mac rig that pedal
-is not in the chain unless it is deliberately put back, and the Scarlett's monitor knob is
-not a substitute (§3.3). So:
+- **Software kill, unchanged:** a hard output ceiling in the DSP that no automatic tuning
+  may raise, and a mute-on-error path (any xrun, NaN, denormal storm, or watchdog timeout ⇒
+  output muted). See ground rules §10.2–10.4.
+- Every session starts with the DSP output ramped up from silence, never resumed at the
+  previous session's level. Loop gain itself is presently whatever the DTA120's gain control
+  is set to — fixed once chosen, never touched mid-session (ground rule 10.5).
+- **Abel present for every real-loop run** (ground rule 10.1) still holds. Presence is no
+  longer "a foot on a pedal"; it means a person is there to judge the take, and to cut power
+  to the DTA120 or pull a cable by hand if he ever wants to — available, not a required
+  interlock.
 
-- **Recommended: put the volume pedal back**, between Scarlett out 3/4 and the power amp.
-  It restores the primary hardware kill *and* the loop-gain control the whole of §8 assumes.
-- If it is not used, **the power amp's own volume control is the designated kill and must
-  be within arm's reach.** Name it out loud at the start of every session.
-- Software side, unchanged in spirit: hard output ceiling as a constant no tuning may raise,
-  a watchdog that mutes without a fresh heartbeat, and mute on NaN, non-finite output,
-  xrun burst, callback exception or stream stop.
-- Every session starts with the amp at zero and the loop gain ramped up from silence.
-  Never resume at the previous session's setting.
+**This reasoning lapses the moment either fact above stops being true.** If a live guitar
+amp or PA is ever introduced (§2.3, Phase 7), or anything is added between Bela out and the
+power amp, re-examine whether a hardware kill is needed again before the next real-loop run.
 
 ---
 
@@ -289,7 +298,7 @@ Abel's observation, restated precisely: slow frequency drift (a partial gliding 
 
 1. **Detect by growth rate, not by rank.** This is the big one. A mode that is about to take over is *already growing exponentially* while it is still 20–30 dB below the incumbent. Scoring `d(magnitude_dB)/dt` per bin catches it there, which converts an impossible latency problem into a comfortable one. By the time a jump is audible as a jump, we have already been regulating it for tens of milliseconds.
 2. **Allocate, don't track.** Model the problem as slot allocation with a glide window (§6.2), not as continuous partial tracking. Within ±50 cents ⇒ the same partial moving. Outside ⇒ a new event, a new cell. One rule handles both the easy case and the hard case, and it never invents a glide that did not happen.
-3. **Enumerate the candidates in advance.** Jump destinations are *not* arbitrary. They are string partials (tuning is known) times the loop's phase condition, shaped by body and exciter resonances. Measure the exciter→body→pickup transfer function once with a swept sine (Phase 1) and you have a ranked candidate list. Then run a bank of cheap narrowband detectors — Goertzel or complex one-pole resonators, ~3 operations per sample each — on the top ~100 candidates, in parallel with the STFT. A hundred of those is nothing for the Cortex-A8, and it gives **block-rate** detection latency instead of frame-rate. This is the direct structural answer to "jumps are a problem": we know where it can jump to, so we watch those places continuously.
+3. **Enumerate the candidates in advance.** Jump destinations are *not* arbitrary. They are string partials (tuning is known) times the loop's phase condition, shaped by body and exciter resonances. Measure the exciter→body→pickup transfer function once with a swept sine (Phase 1) and you have a ranked candidate list. Then run a bank of cheap narrowband detectors — Goertzel or complex one-pole resonators, ~3 operations per sample each — on the top ~100 candidates, in parallel with the STFT. A hundred of those is nothing for PocketBeagle 2, and it gives **block-rate** detection latency instead of frame-rate. This is the direct structural answer to "jumps are a problem": we know where it can jump to, so we watch those places continuously.
 4. **Asymmetric envelopes.** Attack fast enough to beat loop growth; release slow. A jump then costs at most one attack time of unregulated growth.
 5. **Never fully reset a released cell.** Ramp its reduction back over the release time, so a partial that jumps away and returns does not get a fresh unregulated run each time.
 
@@ -312,7 +321,7 @@ Two feet, two orthogonal jobs. Keep them orthogonal.
 
 | Control | Physical | Governs | Musical meaning |
 |---|---|---|---|
-| **Volume pedal** | Passive, in the loop after Bela out | **Loop gain** | *How much* energy is in the feedback loop — whether it feeds back at all, and how hard |
+| **Volume pedal** | Passive; **not currently wired into the loop** (2026-09-11 — see §4.5) | **Loop gain** | *How much* energy is in the feedback loop — whether it feeds back at all, and how hard. Presently fixed by the DTA120's own gain control instead |
 | **Expression pedal** | Passive, into Bela analog in 0 | **Regulation depth** (per-cell target level offset) | *How that energy is distributed* — heel: raw winner-takes-all; toe: maximum flattening, dense chorus of partials |
 
 The expression pedal's primary mapping is the **per-cell target level**, i.e. how much dominance any single partial is allowed before its cell starts pulling it back. That single axis is the most musical one and should be mapped first. Candidate secondary mappings for later, one at a time: number of active cells, cell Q, release time.
@@ -345,7 +354,7 @@ Computed over a rolling window of the feedback output:
 
 **Safety**
 
-1. Real-loop tests run **only when Abel has confirmed the rig is live and he is present**, with the volume pedal reachable.
+1. Real-loop tests run **only when Abel has confirmed the rig is live and he is present**. This build has no dedicated hardware kill switch to name before running — see §4.5 for why, and for what presence means here instead.
 2. Every real-loop test run is time-boxed by a watchdog in the DSP: no run exceeds N seconds without a fresh heartbeat from the host, then output mutes.
 3. There is a hard output ceiling in code. **No automatic tuning process may raise it.** It changes only by an explicit human commit.
 4. Any xrun, NaN, denormal storm, or lost connection ⇒ mute output, do not "try to recover."
@@ -369,7 +378,8 @@ Computed over a rolling window of the feedback output:
 - Total loop round-trip delay including the mechanical path, and therefore the spacing of the phase-condition comb.
 - Actual loop gain margin: how far above unity the loop sits at typical volume-pedal positions.
 - Whether the exciter meaningfully drives the strings, or mostly the top — this determines whether feedback locks to string partials or body modes, and therefore how the candidate list is built.
-- CPU headroom on the Cortex-A8 for STFT + Goertzel bank + N biquads at the chosen block size.
+- CPU headroom on PocketBeagle 2 (multi-core; §3.1) for STFT + Goertzel bank + N biquads at
+  the chosen block size, and the inter-thread pattern the Bela Gem migration guide requires.
 - Expression pedal's pot value, taper and TRS convention.
 - Whether the pre-effects split has enough level for Bela without an extra gain stage.
 - Does the guitar need to be damped/muted between tests, or does the loop restart cleanly from silence?
@@ -378,10 +388,9 @@ Computed over a rolling window of the feedback output:
 
 ## Sources
 
-- [Bela hardware — Bela Knowledge Base](https://learn.bela.io/using-bela/about-bela/bela-hardware/)
-- [Hardware explained — Bela wiki](https://github.com/BelaPlatform/Bela/wiki/Hardware-explained)
-- [Analog Input tutorial — Bela Knowledge Base](https://learn.bela.io/tutorials/pure-data/connecting/analog-input/)
-- [Audio Input Maximum Voltage and Input Buffer — Bela forum](https://forum.bela.io/d/730-audio-input-maximum-voltage-and-input-buffer)
+- [Bela Gem Stereo — shop.bela.io](https://shop.bela.io/products/bela-gem-stereo)
+- [Bela Gem Stereo & Multi — bela.io](https://bela.io/products/bela-gem-stereo-and-multi/)
+- [Migrating to Bela Gem — Bela Knowledge Base](https://learn.bela.io/get-started-guide/migrating-to-bela-gem/)
 - [Using scripts — Bela Knowledge Base](https://learn.bela.io/using-bela/technical-explainers/scripts/)
 - [Fft class reference — Bela docs](https://docs.bela.io/classFft.html)
 - [pybela — BelaPlatform](https://github.com/BelaPlatform/pybela)

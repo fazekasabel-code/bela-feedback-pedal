@@ -8,17 +8,30 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 
 ---
 
+> **Status.** Not starting from zero: the proxy metrics (`host/harness/metrics.py`), the
+> log-record writer (`host/harness/logrecord.py`), an I/O bring-up tool, and a working
+> **one adaptive cell** (`sc/gen1_cell.scd`) already exist and have **passed the "second
+> partial blooms" test** (Phase 4). That run exposed a detector defect — pitch tracking
+> finds a fundamental, not the dominant partial — and replacing it with the FFT peak
+> picking of §6.1 is the first real DSP task here (Phase 3). The Phase 2 loop simulator has
+> **not been built yet**. Every Gem hardware number this plan assumes is unverified until
+> Phase 0/1 measures it — see **§3.1** in
+> [`ground-rules-and-facts.md`](ground-rules-and-facts.md).
+
+---
+
 ## Phase 0 — Bring-up and the development spine
 
 *Abel present for the physical parts; agent does most of it once it can reach the board.*
 
-- Flash the Bela image, get networking up (USB gadget at `root@192.168.7.2`, and/or Ethernet on the LAN so the Mac need not be tethered), set up SSH keys so the agent can build and run without prompts.
-- Verify the Bela script workflow end to end: `build_project.sh` (copy + compile + run, `-b` for background, `--watch`), `run_project.sh`, `stop_running.sh`, `set_startup.sh` for boot-time launch.
+- **Done, 2026-09-11.** Board reachable at `root@192.168.7.2` over the USB-C gadget address; key-based SSH works with no prompts. The browser IDE hasn't been tried, but the CLI path the agent actually needs is live.
+- Verify the Bela script workflow end to end: `build_project.sh` (copy + compile + run, `-b` for background, `--watch`), `run_project.sh`, `stop_running.sh`, `set_startup.sh` for boot-time launch. **Partly done, 2026-09-11:** `build_project.sh` (foreground and `-b`/`--force`) and `stop_running.sh` confirmed working, run directly on the board (`Bela/scripts/`) against a project `scp`'d there — see `bela/io-check-input/` below. `scripts/deploy.sh`'s own host-side path (which assumes a local Bela repo clone on the Mac) is still unverified; `run_project.sh` / `set_startup.sh` untried.
 - Create the repo: `render.cpp` and DSP sources, host-side Python harness, `rig-profile.json`, docs, test logs. `main` always boots and makes sound.
 - Cursor/Claude rules file: the ground rules of §10 as enforced project instructions — safety ceiling untouchable, one variable at a time, every run logged with commit hash.
-- Hello-world: stereo passthrough with a hard output limiter and a mute-on-error path. This is the skeleton every later version is grown from, and it is the first thing that ever drives the exciter.
+- Hello-world: stereo passthrough with a hard output limiter and a mute-on-error path (`bela/gen1-passthrough/`). **Written, not yet built or run on hardware** — this is the first thing that ever drives the exciter, so it needs Abel in the room (ground-rules §4.5), even though this build carries no dedicated hardware kill switch.
+- **Input signal confirmed, 2026-09-11.** `bela/io-check-input/` — a throwaway, output-silent diagnostic (never calls `audioWrite`, so it cannot drive the exciter regardless of how the outputs are patched) — was built, deployed and run to check the real signal chain: Epiphone (humbucker) → M4 (buffered direct out) → Bela Gem audio in. First pass: both channels pinned at 0 dBFS peak, clipping. Abel turned the source down; re-check came back clean at ch0 ≈ ‑19 dBFS peak / ‑31 dBFS RMS, ch1 ≈ ‑19 dBFS peak / ‑32 dBFS RMS, matched L/R, no clipping. Board reported 2 in / 2 out @ 44100 Hz, block size 16 at default project settings — not yet the deliberate Phase 1 choice. Logged in `rig-profile.json` → `host.input_signal_check`.
 
-**Exit:** the agent can, unattended, edit a file on the Mac, build it onto the Bela, run it, and read back whether it ran — with no human keystrokes in the loop.
+**Exit:** the agent can, unattended, edit a file on the Mac, build it onto the Bela, run it, and read back whether it ran — with no human keystrokes in the loop. **Mostly there:** build/run/stop confirmed working headlessly over SSH and proven against a real input-signal check; what's left is running `gen1-passthrough` itself (the first thing that touches the exciter — Abel present per ground-rules §4.5) and closing out `scripts/deploy.sh` / `run_project.sh` / `set_startup.sh`.
 
 ---
 
@@ -28,17 +41,17 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 
 **Instrumentation first** — build it before the measurements, so the measurements are captured automatically:
 
-- Integrate Bela's `Watcher` library and **pybela** (websocket streaming, logging, monitoring and control of variables between the board and Python). This is the agent's eyes: it can stream out internal state (detected peaks, per-cell frequency and gain reduction, input/output RMS) and push in parameter changes without recompiling.
+- Integrate Bela's `Watcher` library and **pybela** (websocket streaming, logging, monitoring and control of variables between the board and Python). This is the agent's eyes: it can stream out internal state (detected peaks, per-cell frequency and gain reduction, input/output RMS) and push in parameter changes without recompiling. Confirm both work with the Gem's IDE (ground-rules §3.1, open question 3) — if the streaming path has moved, this is where that is found out.
 - Host harness: run a test, stream the variables, record the audio, compute the §9 proxy metrics, write one log record.
 
 **Then measure the rig:**
 
 1. Round-trip audio latency at the chosen block size; CPU load headroom.
-2. Gain staging: pickup level into Bela (target ~-12 dBFS peak on normal playing), Bela out into the volume pedal, power amp gain — then **fix the power amp gain permanently and write it down**.
+2. Gain staging: pickup level into Bela (target ~-12 dBFS peak on normal playing), Bela out straight into the power amp (Dayton DTA120) — no pedal in between in this build, see ground-rules §4.5 — then **fix the power amp gain permanently and write it down**.
 3. **Exciter→body→pickup transfer function** by swept sine at low level. This is the loop's gain landscape and it produces the ranked candidate list of §7.3.
 4. Partial map for the tuning(s) in use.
 5. Feedback threshold: volume-pedal position at which the loop reaches unity, and how far above unity it goes at typical settings.
-6. Expression pedal: pot value, taper, TRS convention, heel/toe endpoints as read by the ADC (remember the 3.3 V rail into a 0–4.096 V input reads roughly 0 → 0.806).
+6. Expression pedal: pot value, taper, TRS convention, heel/toe endpoints as read by the ADC — calibrate and store these, never assume a range.
 7. Baseline recording: **the rig with no regulation at all**, feeding back at several volume-pedal positions. This is the "before" that every later result is compared against, and it is what winner-takes-all looks like in the metrics.
 
 **Exit:** `rig-profile.json` v1 exists, is committed, and the harness can compute all §9 metrics from a recorded take automatically.
@@ -102,9 +115,11 @@ Tune attack, release, Q and target on the simulator; validate a shortlist on the
 
 *Abel present for wiring, agent for the mapping.*
 
-Wire the expression pedal (3.3 V / wiper / GND, series resistor, software smoothing, calibrated endpoints from the rig profile) and map it to per-cell target level. Verify the axis is continuous and monotone, that heel-down is genuine transparent bypass, and that the pedal and the volume pedal stay orthogonal — one governs how much energy is in the loop, the other how it is distributed.
+Wire the expression pedal (3.3 V / wiper / GND, series resistor, software smoothing, calibrated endpoints from the rig profile) and map it to per-cell target level. Verify the axis is continuous and monotone, that heel-down is genuine transparent bypass, and that the pedal stays orthogonal to loop gain. Loop gain is presently fixed by the DTA120's own gain control, not a pedal (§4.5); if a volume pedal is reintroduced later for foot control of loop gain, the same orthogonality check applies — one governs how much energy is in the loop, the other how it is distributed.
 
-Then the part that only Abel can do: **play it.** Sweep the pedal across the range at several volume-pedal settings, record, and decide whether the range is musically well-distributed or whether the useful zone is squeezed into 10% of the travel. Reshape the curve accordingly.
+The analog-in full-scale voltage is unconfirmed (ground-rules §3.1, open question 2) — do not assume a range; calibrate from the endpoints stored in the rig profile. MIDI over the USB-A host is available as a fallback control path if the analog pedal input turns out not to work as expected.
+
+Then the part that only Abel can do: **play it.** Sweep the pedal across the range at several loop-gain settings, record, and decide whether the range is musically well-distributed or whether the useful zone is squeezed into 10% of the travel. Reshape the curve accordingly.
 
 **Exit:** Abel can get from raw winner-takes-all to dense multi-partial texture with his foot, and the whole travel is useful.
 
@@ -147,6 +162,6 @@ Reintroduce **amp volume** as a deliberate variable at the very end (§2.3): the
 | Jump detection is too slow in practice | Growth-rate scoring + Goertzel candidate bank (§7) are both designed for exactly this; measured explicitly in Phase 3 |
 | Regulation kills the feedback instead of redistributing it | Target-level cells, not fixed notches (§5); "sustain" is a first-class metric |
 | Proxy metrics reward something ugly | Ratings are ground truth; metrics are rewritten when they disagree |
-| Passive pickup into Bela's ~20 kΩ input degrades detection | Buffered split is a ground rule, not an option |
-| Uncontrolled acoustic loop through the amp masks everything | Amp silent during all development; reintroduced only in Phase 7 |
-| CPU ceiling on the single-core Cortex-A8 | Load tracked from Phase 3 on; Goertzel bank is cheap by design; N is a tunable |
+| Passive pickup into an unbuffered board input degrades detection | The M4's buffered instrument input is a ground rule, not an option |
+| Uncontrolled acoustic loop through the amp masks everything | No amp is wired into this build at all during development; reintroduced only in Phase 7, at which point ground-rules §4.5's "no hardware kill needed" reasoning must be revisited |
+| CPU ceiling on PocketBeagle 2 | Load tracked from Phase 3 on; Goertzel bank is cheap by design; N is a tunable |

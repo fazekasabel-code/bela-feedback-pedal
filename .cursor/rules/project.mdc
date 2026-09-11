@@ -7,10 +7,12 @@ Follow `CLAUDE.md` at the repo root in full. It is the binding rule set for this
 
 Key points that are easy to get wrong:
 
-- Bela's audio input is ~20 kOhm at the ADC. The split feeding it must be buffered.
-- Bela analog inputs read 0-4.096 V, but the expression pedal is fed from the 3.3 V rail,
-  so full travel reads roughly 0 -> 0.806, not 0 -> 1. Never hard-code 0-1; use the
-  calibrated endpoints in `rig-profile.json`.
+- Platform is the **Bela Gem Stereo** (see §3.1 in `docs/ground-rules-and-facts.md`).
+- Whether the audio input needs a buffer in front of a passive pickup is unverified —
+  assume yes until Phase 0 measures it.
+- The analog input's full-scale voltage is unconfirmed. Never hard-code 0-1 or assume a
+  range; use the calibrated endpoints stored in `rig-profile.json`.
+- The Gem has **no analog outputs** (`analogWrite()` isn't available). gen1 never used them.
 - The actuator is a peaking-EQ biquad with a *level target*, not a fixed-depth notch.
 - Detection arms on growth rate, not on which partial is loudest.
 - Frequency movement within +/-50 cents between frames = the same partial gliding.

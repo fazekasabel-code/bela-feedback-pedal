@@ -1,117 +1,101 @@
 {
-  "_comment": "The measured truth about the physical rig. Everything reads this. All values null until they are measured. Bump version and re-measure whenever the rig physically changes: different guitar, exciter moved, amp gain touched, interface settings changed. Version 0 means nothing has been measured yet.",
-  "version": 1,
-  "platform": "mac-scarlett-8i6",
-  "measured_at": "2026-09-06",
-  "measured_by": "Claude, unattended, per Abel's standing permission",
-  "_platform_note": "Moved from Bela to a Mac host on 2026-09-06 because the Bela is not connectable. See docs/ground-rules-and-facts.md 3.3 and docs/mac-rig-plan.md. The parked Bela profile shape is preserved under 'bela_parked'.",
+  "_comment": "The measured truth about the physical rig. Everything reads this. All values null until they are measured. Bump version and re-measure whenever the rig physically changes: different platform, different guitar, exciter moved, amp gain touched, interface settings changed. Version 0 means nothing has been measured yet.",
+  "version": 2,
+  "platform": "bela-gem-stereo",
+  "measured_at": null,
+  "measured_by": null,
+  "_platform_note": "Bela Gem Stereo (Starter Kit, PocketBeagle 2 base; Bela store order #502852), on hand since 2026-09-10. See docs/ground-rules-and-facts.md 3.1 and docs/phase-plan.md. Earlier measurements on a different rig are tagged to their own profile version in logs/README.md, not carried into this file.",
+  "_signal_chain_note": "As actually wired 2026-09-11: Epiphone (humbucker) -> M4 (buffered instrument input, direct out) -> Bela Gem audio in; Bela Gem audio out -> power amp (Dayton DTA120) -> exciter (Dayton), straight through, no pedal or other device in between. See ground-rules-and-facts.md 4.5 for the fail-safe decision this relies on: no hardware kill switch, because there is no separate uncontrolled acoustic loop in this build and the DTA120+exciter's worst case is judged safe by Abel.",
+  "_spec_disclaimer": "Every value in 'host', 'loop' etc. below is null. The Bela Gem Stereo numbers that are known from the published spec (2 in / 2 out, up to 24-bit / 96 kHz, 8 analog in, no analog out, PocketBeagle 2, USB-C) are recorded as _spec_* notes, NOT as measurements. Phase 0/1 fills in the real values.",
   "host": {
-    "interface": "Focusrite Scarlett 8i6",
-    "sample_rate": 48000,
-    "block_size": 128,
+    "board": "Bela Gem Stereo",
+    "base_board": "PocketBeagle 2",
+    "_spec_base_board_note": "Multi-core. Migration guide asks for safer inter-thread patterns.",
+    "sample_rate": 44100,
+    "_spec_sample_rate_note": "Gem Stereo supports up to 24-bit / 96 kHz. 44100 is the board's DEFAULT project setting, observed 2026-09-11 running bela/io-check-input/ with no rate specified -- not yet the deliberate Phase 0/1 choice (44.1 / 48 / 96 still open).",
+    "block_size": 16,
+    "_block_size_note": "Board default, same caveat as sample_rate above -- observed 2026-09-11, not yet chosen deliberately.",
     "input_channels_open": 2,
-    "output_channels_open": 4,
-    "guitar_input_index": 0,
-    "guitar_input_label": "Scarlett input 1, INST / Hi-Z",
-    "exciter_output_indices": [
-      2,
-      3
-    ],
-    "exciter_output_label": "Scarlett outputs 3/4",
-    "_channel_index_note": "Confirmed. Abel ran io_check map and the tone came back through the exciter into input 1. Outputs 3/4 leave via the second headphone jack.",
+    "output_channels_open": 2,
+    "_spec_audio_io_note": "2 audio in, 2 audio out. Stereo line in; differential line out plus a headphone out.",
+    "guitar_input_index": null,
+    "guitar_input_label": null,
+    "exciter_output_index": null,
+    "exciter_output_label": null,
+    "_channel_index_note": "Confirm by sending a tone to one output at a time and watching the input RMS. On this rig the exciter closes the path back to the input, so one command confirms the channel index and proves the physical chain together.",
+    "audio_input_full_scale_vpp": null,
+    "audio_input_impedance_ohms": null,
+    "_input_buffer_note": "Moot for now -- the M4's buffered instrument input sits in front of the Gem's own input regardless (ground-rules 4.1), so this rule is satisfied by construction. Still unmeasured what the Gem's own input would need on its own.",
+    "input_signal_check": {
+      "date": "2026-09-11",
+      "source": "pink noise into the Epiphone's position (guitar -> M4 direct out -> Bela in)",
+      "first_pass_ch0_peak_dbfs": 0.0,
+      "first_pass_ch1_peak_dbfs": 0.0,
+      "_first_pass_note": "Clipping on both channels at default board gain -- source too hot. Abel turned it down.",
+      "second_pass_ch0_peak_dbfs": -19.0,
+      "second_pass_ch0_rms_dbfs": -31.3,
+      "second_pass_ch1_peak_dbfs": -19.2,
+      "second_pass_ch1_rms_dbfs": -31.6,
+      "_second_pass_note": "Clean, matched L/R, no clipping. Confirms input signal path end to end. Measured with bela/io-check-input/ (output-silent diagnostic, never writes audioWrite -- cannot drive the exciter). Not the deliberate Phase 1 gain-staging measurement (gain_staging.pickup_into_board_peak_dbfs below is still null)."
+    },
     "round_trip_latency_ms": null,
     "round_trip_latency_samples": null,
-    "_latency_note": "Measured electrically by patching an output back to an input. Sets the spacing of the phase-condition comb.",
-    "xruns_in_60s_at_block": {
-      "blocks": 22500,
-      "input_overflows": 0,
-      "output_underflows": 0,
-      "latency_hint": "low",
-      "_note": "60.00 s at 48 kHz / 128 frames, clean. Re-run after any change to block size or latency hint."
-    },
-    "monitor_knob_attenuates_out_34": false,
-    "focusrite_control_out34_source": "Playback 3/4 (confirmed by Abel 2026-09-06)",
-    "_focusrite_note": "Must read 'Playback 3/4' only. A hardware mix carrying Input 1 to outputs 3/4 closes an analog loop the DSP cannot see or mute.",
-    "portaudio_latency_hint": "low",
-    "_latency_hint_note": "sounddevice defaults to 'high', which asked this interface for ~90 ms of buffering per direction. Measured 88.6 in / 91.0 out on the default, 11.3 in / 13.7 out with 'low', both with zero xruns. Never open a stream on the default.",
-    "portaudio_reported_latency_ms": {
-      "in": 11.25,
-      "out": 13.69,
-      "_note": "PortAudio's configured buffering, NOT a measurement. The real number is the electrical loopback in round_trip_latency_ms, still unmeasured."
-    },
-    "callback_headroom": {
-      "max_ms": 0.062,
-      "mean_ms": 0.0066,
-      "budget_ms": 2.67,
-      "_note": "Worst case is about 2 percent of the block deadline. Python is not the bottleneck."
-    }
+    "_latency_note": "Gem spec claims sub-millisecond. Measure electrically by patching an output back to an input. Sets the spacing of the phase-condition comb.",
+    "analog_in_channels": null,
+    "analog_in_voltage_range": null,
+    "_spec_analog_in_note": "8 analog inputs, 16-bit, ~22-24 kHz, DC-coupled. Voltage range TBC. Used for the expression pedal (ground-rules 4.3, 8).",
+    "analog_out_channels": 0,
+    "_spec_analog_out_note": "None. analogWrite() is not available on Gem. gen1 never used analog out.",
+    "connectivity": null,
+    "_spec_connectivity_note": "USB-C device port for the IDE and gadget networking; USB-A host for WiFi / BT / Ethernet / MIDI; I2C + Qwiic.",
+    "ide": null,
+    "_spec_ide_note": "Browser IDE (TypeScript/Vue). C++, Pure Data, SuperCollider supported.",
+    "xruns_in_60s_at_block": null,
+    "callback_headroom": null
   },
   "gain_staging": {
-    "split_point": "guitar direct into interface",
-    "scarlett_input_gain_setting": null,
-    "pickup_into_interface_peak_dbfs": null,
+    "split_point": "M4 (buffered instrument input, direct out) into Bela Gem audio in",
+    "board_input_gain_setting": null,
+    "pickup_into_board_peak_dbfs": null,
     "_target": "about -12 dBFS peak on normal playing, so feedback growth has room before clipping",
     "dsp_output_ceiling": 0.7,
-    "_ceiling_note": "A safety constant in code. No tuning process may raise it. Recorded here for the log only; code is the authority.",
-    "power_amp_model": null,
+    "_ceiling_note": "A safety constant in code. No tuning process may raise it (ground rule 1). It must be reviewed for the Gem's actual output level and sample rate by an EXPLICIT human commit before the first live loop - not silently, not by an optimiser. Code is the authority; this is for the log only.",
+    "power_amp_model": "Dayton Audio DTA120",
     "power_amp_gain_setting": null,
-    "_amp_note": "Fixed constant once set. Never a variable under test."
+    "_amp_note": "Fixed constant once set. Never a variable under test. Wired straight from Bela audio out to the exciter -- no pedal or other device in between (ground-rules 4.5)."
   },
   "safety": {
-    "designated_hardware_kill": "Scarlett headphone-2 level knob; power amp volume as backstop",
-    "_kill_note": "Either the volume pedal patched between Scarlett out 3/4 and the amp (recommended), or the amp's own volume control within arm's reach. The Scarlett monitor knob is NOT a kill for outputs 3/4. Must be filled in before any live-loop run.",
+    "designated_hardware_kill": "none -- see ground-rules 4.5 (2026-09-11)",
+    "_kill_note": "Deliberate, not missing: Bela audio out feeds the Dayton DTA120 straight into the exciter, no pedal or other device in between. Ground rule (Abel, 2026-09-11): no dedicated hardware kill is required in this build, because there is no second, uncontrolled acoustic loop (nothing feeds a live guitar amp or PA) and the DTA120+exciter's worst case even at full runaway is judged safe. Software kill (output ceiling, mute-on-error, watchdog) stays mandatory regardless. If a hardware kill is ever added back (e.g. a volume pedal), record it here and it becomes required again.",
     "watchdog_timeout_s": 120,
-    "unattended_runs_permitted": true,
-    "_unattended_note": "Abel, 2026-09-06. Rests entirely on the guitar amp being dead so only the controlled loop is live. Lapses if the guitar amp is switched on."
+    "unattended_runs_permitted": false,
+    "_unattended_note": "Not granted yet on this rig. Requires Abel to explicitly confirm the rig connected and permit unattended operation, per ground rule 2."
   },
   "instrument": {
-    "guitar": null,
+    "guitar": "Epiphone (exact model TBD)",
     "tuning": null,
-    "pickup": null,
+    "pickup": "humbucker",
     "string_partials_hz": []
   },
   "exciter": {
-    "model": null,
+    "model": "Dayton Audio (surface transducer, exact model TBD)",
     "mounting_position": null,
     "impedance_ohms": null,
     "power_handling_w": null
   },
   "loop": {
-    "unity_gain_master_setting": 0.3,
-    "_unity_note": "Linear master gain in sc/gen1_cell.scd at which the loop reaches unity, with the amp at its 2026-09-06 setting. Measured by ramp: nothing below 0.26, sustained feedback from ~0.30. Useful range 0.30-0.35 is narrow; the script cap is 0.35.",
-    "first_partial_hz": 392.5,
-    "candidate_frequencies_hz": [
-      392.5,
-      293.5,
-      587.0,
-      785.1
-    ],
-    "_candidates_note": "Ranked from the 2026-09-06 takes. 392.5 G4 is what the raw loop chooses; 293.5 D4 is what comes up when G4 is regulated; 587.0 D5 and 785.1 G5 are the octaves seen 23-29 dB down.",
-    "transfer_function_measurement": null
+    "unity_gain_master_setting": null,
+    "first_partial_hz": null,
+    "candidate_frequencies_hz": [],
+    "transfer_function_measurement": null,
+    "_note": "All null - nothing has fed back on this platform yet."
   },
   "control": {
     "regulation_depth_source": null,
-    "_control_note": "No analog input on this rig. Regulation depth is a MIDI CC or a keyboard key until the Bela returns. Same axis as the expression pedal, different transducer."
+    "_control_note": "An analog input (the Gem has 8) - a passive expression pedal per ground-rules 4.3, calibrated from analog_in_voltage_range once measured. MIDI over the USB-A host is available as a fallback."
   },
   "baseline": {
-    "unregulated_takes": [
-      "logs/2026-09-06/gen1_base_035.wav"
-    ],
-    "_note": "The 'before' recordings: the loop feeding back with no regulation, at several master-gain positions. Every later result is compared against these."
-  },
-  "bela_parked": {
-    "_note": "Kept for when the board is connectable again. See docs/phase-plan.md.",
-    "block_size": null,
-    "audio_sample_rate": 44100,
-    "analog_sample_rate": null,
-    "round_trip_latency_ms": null,
-    "expression_pedal": {
-      "pot_value_ohms": null,
-      "taper": null,
-      "trs_wiring": null,
-      "adc_heel": null,
-      "adc_toe": null,
-      "_note": "adc_heel/adc_toe are raw 0-1 analogRead values. A 3.3 V-fed pedal tops out near 0.806, not 1.0. Never hard-code the range."
-    }
+    "unregulated_takes": [],
+    "_note": "The 'before' recordings: the loop feeding back with no regulation, at several master-gain positions. None recorded on this platform yet."
   }
 }
