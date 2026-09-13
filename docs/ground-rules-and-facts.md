@@ -29,10 +29,10 @@
 ```
                        ┌──────────► [ effects ] ──► [ GUITAR AMP ]   ← acoustic output
                        │                                   ╎          NOT WIRED in this
-   GUITAR ──► [ M4, buffered direct out ]                  ╎          build — see §2.3
+   GUITAR ──► [ BELA in, DIRECT — no buffer ]               ╎          build — see §2.3
                        │                                   ╎  (uncontrolled
                        │                                   ╎   acoustic loop)
-                       └──► [ BELA in ] ──► DSP ──► [ BELA out ]
+                       └──► DSP ──► [ BELA out ]
                                                         │
                                              [ power amp: Dayton DTA120 ]
                                                         │
@@ -50,12 +50,22 @@ As actually wired (2026-09-11) there is no volume pedal and no other device betw
 out and the power amp — see §4.5 for why that's a considered decision, not a gap. Loop gain
 is presently whatever the DTA120's own gain control is set to, fixed per ground rule 10.5.
 
+**Revised 2026-09-13: M4 removed from the chain, temporarily unbuffered.** The M4 (buffered
+instrument input, direct out) shown in this doc's history is **no longer in the signal
+path**. It was pulled after being identified as the source of a real ground loop (see §4.4)
+— it shared USB power/data with the same Mac used to tether Bela, while also being linked to
+Bela by an analog cable, closing a loop through two ground paths at once. The guitar now
+plugs **directly** into Bela's audio in, unbuffered, mono — see §4.1's rule, which this
+directly contradicts on purpose, not silently. A passive DI box is on order to restore
+buffering (and, as a transformer, galvanic isolation) once it arrives; until then, high-end
+roll-off from the impedance mismatch is a known, accepted cost, not a bug to chase.
+
 ### 2.1 The two chains are not symmetric
 
 Only one of them is a loop.
 
 - **Amplification chain** (guitar → effects → amp) is an *output*. It does not close a loop through the DSP. In this build it is not wired at all (§2.3).
-- **Feedback chain** (pickup → M4 → Bela → DSP → Bela out → power amp (Dayton DTA120) → exciter (Dayton) → body → strings → pickup) is the **controlled loop**. This is the only loop that is live at all. Everything gen1 does happens inside it.
+- **Feedback chain** (pickup → Bela in, direct/unbuffered as of 2026-09-13 → DSP → Bela out → power amp (Dayton DTA120) → exciter (Dayton) → body → strings → pickup) is the **controlled loop**. This is the only loop that is live at all. Everything gen1 does happens inside it.
 
 ### 2.2 Split point: before or after the effects
 
@@ -74,7 +84,7 @@ Both are electrically viable. They are not musically equivalent.
 
 At stage volume, an amp's acoustic output excites the guitar body and strings directly. That is a real feedback loop, it is *not* under the pedal's control, and it has exactly the winner-takes-all character gen1 is trying to defeat. It will mask or undo the regulator's work.
 
-**As actually built (2026-09-11): this loop does not exist.** The guitar goes only into the M4's buffered instrument input and from there to the Bela; there is no live guitar amp or PA anywhere in the signal path. This isn't the amp being kept silent by discipline — it simply isn't wired. That is what §4.5's fail-safe reasoning leans on.
+**As actually built (2026-09-11, wiring detail updated 2026-09-13): this loop does not exist.** The guitar goes only into Bela's audio in (directly as of 2026-09-13, previously via the M4's buffered instrument input) and from there into the DSP; there is no live guitar amp or PA anywhere in the signal path. This isn't the amp being kept silent by discipline — it simply isn't wired. That is what §4.5's fail-safe reasoning leans on, and removing the M4 doesn't change it: still no second acoustic loop, whichever way the guitar reaches Bela's input.
 
 **Ground rule for all development and measurement, unchanged for if/when this returns:** the amp is silent, on headphones, or in another room. The only loop that is live during testing is the controlled one. Amp volume is reintroduced as a deliberate, late-phase variable (Phase 7), never as an uncontrolled background condition — and the moment it is reintroduced, §4.5's "no hardware kill needed" reasoning must be revisited.
 
@@ -141,7 +151,8 @@ exact board — do not proceed past bring-up on the assumed values:
 | Item | Status | Notes to fill in during Phase 1 |
 |---|---|---|
 | Bela Gem Stereo (Starter Kit) | On hand from 2026-09-10; SSH bring-up confirmed 2026-09-11 (root@192.168.7.2, key auth, `build_project.sh` runs on-board) | Browser IDE still unchecked |
-| Buffer: **M4** interface, buffered instrument input, direct out | On hand, in the signal path | Satisfies §4.1's buffered-input rule regardless of the Gem's own input impedance |
+| Buffer: **M4** interface, buffered instrument input, direct out | **Removed from the signal path 2026-09-13** — was the source of a confirmed ground loop (shared USB ground with the tethering Mac, see §4.4). Still owned, not currently used | A passive DI box (ground-isolating, no shared power needed) is on order to replace it |
+| Guitar → Bela: **direct, unbuffered** (2026-09-13, temporary) | In the signal path now, in place of the M4 | Deliberately contradicts §4.1's buffer rule — known cost (treble roll-off from impedance mismatch), accepted until the DI box arrives. Guitar is mono; Bela audio in is stereo — expect signal on channel 0 (left) only until confirmed by ear/meter |
 | Exciter: **Dayton** surface transducer | On hand, wired straight after the power amp | Exact model, impedance, power handling, mounting position on the body |
 | Power amp: **Dayton DTA120** | On hand, wired straight from Bela audio out to the exciter — **no pedal or other device in between** (§4.5) | Model confirmed; output power, gain, input sensitivity, and the fixed gain setting once chosen (ground rule 10.5) |
 | Guitar volume pedal (passive) | On hand, **not currently in the signal path** | Loop gain is presently fixed by the DTA120's own gain control. Can be reintroduced later for foot control (§8), but is no longer required as a safety interlock — see §4.5 |
@@ -165,9 +176,17 @@ Bela's own forum recommends a buffer stage to raise input impedance where it app
 **Ground rule:** until measured, treat the feed to the board as **always buffered**. Either
 use an active/buffered splitter, or take the feed from a buffered pedal output. Never wire a
 bare passive pickup straight in and then spend a week debugging "the detector is missing the
-high partials." **As wired (2026-09-11):** the guitar goes through the M4's buffered
-instrument input, direct out into Bela in — this rule is satisfied regardless of what the
-Gem's own input impedance turns out to be.
+high partials."
+
+**Deliberately violated, 2026-09-13, not silently:** the M4 (which satisfied this rule) was
+removed after being identified as the source of a ground loop — see §4.4. The guitar now
+goes directly into Bela's audio in, unbuffered, until a passive DI box arrives. Detection
+work done against this window's recordings should expect degraded high end and treat it as a
+known artefact of this period, not a detector defect. A passive DI was chosen deliberately
+over an active one specifically because it restores this rule *and* fixes the ground loop at
+the same time (a transformer is galvanically isolating; see the DI-vs-active discussion this
+decision came from — passive attenuates rather than boosts, which is fine here because the
+humbucker is fairly high output and Bela's own input PGA has up to 59.5 dB of gain to spare).
 
 ### 4.2 Levels
 
@@ -193,15 +212,18 @@ Three things to get right:
 
 Two amplifiers, one instrument and a transducer bolted to the guitar is a ground loop waiting to happen, and hum inside a feedback loop is not just hum — it is a partial the regulator will faithfully detect and fight. Plan for it: shared power strip, and be ready to add a transformer isolator on one of the two chains.
 
+**Confirmed, not just anticipated, 2026-09-12/13.** This actually happened, though not from the two-amplifiers case above: the M4 audio interface and Bela were both drawing ground reference through the same Mac at once (M4 over USB audio, Bela over the USB-C dev tether) while also being linked by an analog cable — two paths back to one ground. Symptoms were loud, complex noise (clicking, static, irregular pulsing) audible identically on every downstream device tried (headphones, Genelec active monitors, the DTA120→exciter chain), because the noise was already in the signal at Bela's output jack. Isolated methodically: a plain electrical loopback (Bela out wired straight to Bela in, no second device) was clean regardless of code/Watcher/CPU load; a program that never reads audio input at all was clean regardless of deployment path; the M4's own output, monitored directly with the M4 never touching Bela, was clean; the M4 through Bela, on the plainest possible passthrough with zero instrumentation, was noisy. Fix: take the M4 off the Mac's USB entirely (its own wall power only) — the loud noise disappeared, leaving a much quieter garden-variety 50 Hz hum (M4's own supply vs. Bela's Mac-referenced ground, still tied together by an unbalanced cable — the standard remaining case this section already calls out). **Lesson for any future device added to this rig:** if it shares a USB host with Bela *and* has an analog connection to Bela, check for this before blaming anything else, especially before blaming code.
+
 ### 4.5 Fail-safe (revised 2026-09-11 for the rig as actually built)
 
 The rig can produce a lot of acoustic energy on its own initiative — that has not changed.
 What has changed is the shape of the risk, because of two facts about this specific build:
 
 1. **There is no second, uncontrolled acoustic loop.** Per §2.3, the guitar goes only into
-   the M4 → Bela; nothing feeds a live guitar amp or PA. The failure mode a hardware kill
-   traditionally guards against — a runaway controlled loop *compounding* with an
-   independent acoustic loop through a stage amp — is not wired at all right now.
+   Bela's audio in (directly as of 2026-09-13, previously via the M4); nothing feeds a live
+   guitar amp or PA. The failure mode a hardware kill traditionally guards against — a
+   runaway controlled loop *compounding* with an independent acoustic loop through a stage
+   amp — is not wired at all right now, and removing the M4 doesn't change that.
 2. **Bela audio out feeds the Dayton DTA120 power amp directly into the exciter, with no
    pedal or other device in between.**
 

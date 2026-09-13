@@ -6,15 +6,20 @@ The full reasoning is in `docs/ground-rules-and-facts.md`; this file is the enfo
 ## Current platform
 
 **Bela Gem Stereo (Starter Kit, PocketBeagle 2 base).** The rig as actually wired,
-2026-09-11: Epiphone (humbucker) → **M4** (buffered instrument input, direct out) → Bela Gem
-audio in; DSP on the board (C++, or SuperCollider as in the existing one-cell work); Bela
-audio out → **power amp (Dayton DTA120) → exciter (Dayton)**, straight through, no pedal in
-between. `docs/phase-plan.md` is the live plan. The physics, DSP architecture and metrics
-are platform-independent — see `docs/ground-rules-and-facts.md` §3.1 for the Gem's hardware
-facts (24-bit/96 kHz, sub-ms latency, no analog out, 8 analog in retained, new browser IDE),
-§3.2 for the rest of the chain, and §4.5 for the 2026-09-11 fail-safe decision this wiring
-relies on (no hardware kill switch — see rule 6 below). Almost all of the Gem's own hardware
-numbers are unverified on the unit until Phase 0/1 measures them.
+2026-09-13: Epiphone (humbucker) → Bela Gem audio in **directly, unbuffered** (mono into a
+stereo input — expect signal on channel 0/left only) → DSP on the board (C++, or
+SuperCollider as in the existing one-cell work) → Bela audio out → **power amp (Dayton
+DTA120) → exciter (Dayton)**, straight through, no pedal in between. The **M4** buffer/preamp
+that sat between guitar and Bela until 2026-09-12 has been **removed** — it was the confirmed
+source of a ground loop (shared USB ground with the Mac tethering Bela; see
+`docs/ground-rules-and-facts.md` §4.4) — and a passive DI box is on order to restore
+buffering without reintroducing that. `docs/phase-plan.md` is the live plan. The physics, DSP
+architecture and metrics are platform-independent — see `docs/ground-rules-and-facts.md`
+§3.1 for the Gem's hardware facts (24-bit/96 kHz, sub-ms latency, no analog out, 8 analog in
+retained, new browser IDE), §3.2 for the rest of the chain, and §4.5 for the 2026-09-11
+fail-safe decision this wiring relies on (no hardware kill switch — see rule 6 below). Almost
+all of the Gem's own hardware numbers are unverified on the unit until Phase 0/1 measures
+them.
 
 ## Read first
 
@@ -54,8 +59,9 @@ constraint in it, change the doc in the same commit and say so.
    the output outside the DSP — that closes an analog loop the DSP cannot see or mute.
    Check every session.
 8. **No separate acoustic amplification chain exists in this build.** The guitar goes only
-   into the M4 → Bela; nothing feeds a live guitar amp or PA, so the uncontrolled acoustic
-   loop this rule exists to prevent isn't wired at all right now (ground-rules §2.3). If a
+   into Bela's audio in (directly as of 2026-09-13, see "Current platform" above); nothing
+   feeds a live guitar amp or PA, so the uncontrolled acoustic loop this rule exists to
+   prevent isn't wired at all right now (ground-rules §2.3). If a
    guitar amp or PA is ever introduced — for playing, or for anything else — it must stay
    dead during development, rule 2 applies in its strict form, and rule 6's reasoning no
    longer holds until a hardware kill is reintroduced.
@@ -75,7 +81,9 @@ constraint in it, change the doc in the same commit and say so.
 13. If the rig physically changes — different platform, different guitar, exciter moved,
    amp gain touched — the rig profile is re-measured and its version bumped, and prior
    results are tagged as belonging to the old profile (see `logs/README.md`). Current:
-   `rig-profile.json` is v2, all measurements null.
+   `rig-profile.json` is v3 (bumped 2026-09-13: M4 removed from the signal chain, see
+   "Current platform" above) — the M4-era gain-staging measurements under v2 are retired,
+   everything else is still unmeasured.
 14. `main` always boots and makes sound. Work on branches.
 15. When you are unsure whether a change is a correctness fix or a taste decision, it is a
     taste decision. Stop and ask Abel.
@@ -87,8 +95,9 @@ constraint in it, change the doc in the same commit and say so.
 
 - **"Suppression"** in this project always means *regulation to a target level*, never removal.
   The actuator is a per-partial gain cell with a level target, not a fixed-depth notch.
-- **Controlled loop** = pickup → M4 (buffered direct out) → Bela Gem audio in → DSP → Bela
-  Gem audio out → power amp (Dayton DTA120) → exciter (Dayton) → body → strings → pickup.
+- **Controlled loop** = pickup → Bela Gem audio in (directly, unbuffered, as of 2026-09-13 —
+  previously via the M4, see "Current platform") → DSP → Bela Gem audio out → power amp
+  (Dayton DTA120) → exciter (Dayton) → body → strings → pickup.
 - **Uncontrolled loop** = amp → air → guitar. Not wired in this build at all (rule 8); kept
   as a concept for if/when a guitar amp is reintroduced (phase-plan Phase 7).
 - **Cell** = one adaptive gain-regulation unit bound to one partial.
