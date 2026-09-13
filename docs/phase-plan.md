@@ -8,7 +8,7 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 
 ---
 
-> **Status, 2026-09-13 — handover into Phase 4.** Rig is v3 in `rig-profile.json`: the M4
+> **Status, 2026-09-13 — Phase 4 passed, handover into Phase 5.** Rig is v3 in `rig-profile.json`: the M4
 > buffer/preamp is **out** (confirmed ground-loop source, see ground-rules §4.4), guitar runs
 > **direct/unbuffered into Bela ch0**, exciter is fed from Bela **ch1** via the DTA120 — both
 > confirmed by direct measurement, not assumption. Measured this session: input gain staged
@@ -25,20 +25,24 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 > not forgotten: it needs a transfer-function measurement that hasn't been done, and its
 > whole value (autonomous overnight search without Abel present) matters less while Abel is
 > available for iterative real-rig testing — revisit once Phase 5's wider parameter space
-> makes that need concrete. **Phase 4 is built, not yet validated on hardware:**
-> `bela/gen1-cell/` ports `sc/gen1_cell.scd`'s one adaptive cell to C++, compiled clean on
-> this board's toolchain (`build_project.sh -n`, compile-only, never run — ground rule 2
-> needs Abel present and the rig confirmed live before a real-loop test). One deliberate
-> divergence from the SC patch, worth flagging because it isn't just a port: rather than
-> SC's autocorrelation pitch tracker, the cell binds to a partial via the Phase 3 STFT
+> makes that need concrete. **Phase 4 PASSED, 2026-09-13.** `bela/gen1-cell/` ports
+> `sc/gen1_cell.scd`'s one adaptive cell to C++, compiled clean on this board's toolchain and
+> then run for real: DTA120=100%, Abel present, 30 s, no mute/watchdog/xrun
+> (`logs/2026-09-13/185836_first-cell-take-dta120-100pct.json`). One deliberate divergence
+> from the SC patch, worth flagging because it isn't just a port: rather than SC's
+> autocorrelation pitch tracker, the cell binds to a partial via the Phase 3 STFT
 > growth-detector's machinery (already hardware-validated), but **by magnitude/rank, not by
 > growth rate** — the growth-arm threshold logged above as miscalibrated for this rig's real
 > (~1-2.5 dB/s) growth would otherwise likely never fire for the case this cell exists to
-> regulate. See `bela/gen1-cell/render.cpp`'s header comment for the full reasoning,
-> including the other deliberate simplification (one envelope-follower stage, not SC's two
-> cascaded ones). **Next: a real-loop validation session with Abel** — the Phase 4 exit
-> criterion (hold the dominant partial, watch a second one bloom) needs ears and the rig
-> live, not just a clean compile. Everything above is logged
+> regulate. See `bela/gen1-cell/render.cpp`'s header comment for the full reasoning, including
+> the other deliberate simplification (one envelope-follower stage, not SC's two cascaded
+> ones). **Abel's verdict on the take, listening: pass** — "a nicely blooming chord, always
+> 3-4 notes present," more than the minimum second-partial the exit test asks for. Some
+> distortion audible from ~16s on, cause undetermined between two live candidates: the DSP
+> output ceiling (which the take did hit) or the exciter itself, which turns out to **not be
+> fixed/mounted** — a genuinely new rig fact, not a mid-session change, now in `rig-profile.json`
+> `exciter._mounting_note_2026-09-13`. Abel's call: proceed to Phase 5 regardless, revisit the
+> distortion source and the exciter mount later. Everything above is logged
 > under `logs/2026-09-13/`; see `docs/ground-rules-and-facts.md` §4.4 for the ground-loop
 > story and phase-plan Phase 1/3 sections below for the full measurement writeups.
 
@@ -130,18 +134,28 @@ The success test is specific and it is audible: **hold the dominant partial at i
 
 Tune attack, release, Q and target on the simulator; validate a shortlist on the rig; Abel rates.
 
-**Built, 2026-09-13, not yet run on hardware.** `bela/gen1-cell/` — compiles clean on this
-board's toolchain (compile-only check, never run against the exciter; ground rule 2 needs
-Abel present and the rig confirmed live first). Phase 2's simulator being skipped (see Status
-block above) means this hasn't been tuned against anything yet either — it's SC's original
-defaults (target -24 dB, Q 10, attack 3 ms, release 400 ms, max cut 30 dB), carried over
-untouched, not a result of any search. Binds its one cell to a partial via Phase 3's
-STFT/growth-detector machinery reused as an N=1 allocator, but by loudest-stable-peak rank
-rather than growth rate — see the file's header comment for why (the growth-arm threshold
-flagged miscalibrated in Phase 3's status above would likely never fire for this rig's real
-growth rates). Next step is a real-loop session with Abel to actually run the exit test below.
+**Built and run on hardware, 2026-09-13.** `bela/gen1-cell/` — compiles clean on this board's
+toolchain, then run for real: DTA120=100%, Abel present, 30 s
+(`logs/2026-09-13/185836_first-cell-take-dta120-100pct.json`). No mute, no watchdog trip, no
+xrun/NaN. Untuned — SC's original defaults (target -24 dB, Q 10, attack 3 ms, release 400 ms,
+max cut 30 dB), Phase 2's simulator still skipped so there's nothing to search against yet.
+Binds its one cell to a partial via Phase 3's STFT/growth-detector machinery reused as an N=1
+allocator, but by loudest-stable-peak rank rather than growth rate — see the file's header
+comment for why (the growth-arm threshold flagged miscalibrated in Phase 3's status above
+would likely never fire for this rig's real growth rates).
 
-**Exit:** on the real rig, a second partial reliably blooms, and feedback sustains rather than dying. **Not yet met** — needs the real-loop session above.
+**Abel's verdict, listening to both files: pass.** "A nicely blooming chord, always 3-4 notes
+present" — more than the minimum one extra partial the exit test asks for. From ~16s onward
+some distortion is audible; not yet attributed to one specific cause — either the DSP output
+ceiling (peak_sample did hit 0.5 in this take) or the exciter itself, which turns out **not
+to be fixed/mounted** yet (just resting on the guitar body, can physically "jump" and distort
+under heavy drive independent of the DSP — see `rig-profile.json` `exciter._mounting_note_2026-09-13`,
+a genuinely new fact about the rig, not a change made mid-session). Abel's call: proceed
+regardless (CLAUDE.md rule 16 — his ear is ground truth) and revisit distortion-source once it
+matters more (mounting the exciter properly would also just remove one whole axis of ambiguity
+from every future take).
+
+**Exit:** on the real rig, a second partial reliably blooms, and feedback sustains rather than dying. **Met, 2026-09-13.**
 
 ---
 

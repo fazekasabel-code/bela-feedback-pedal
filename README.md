@@ -17,7 +17,7 @@ sequence of work.
 
 ## Status
 
-**On the Bela Gem Stereo, arrived 2026-09-10. Handed over into Phase 4, 2026-09-13.** Signal
+**On the Bela Gem Stereo, arrived 2026-09-10. Phase 4 passed 2026-09-13, handed over into Phase 5.** Signal
 chain as wired: Epiphone (humbucker) → Bela in **directly, unbuffered** (mono guitar,
 **confirmed on channel 0/left** by direct measurement); Bela out ch1 → power amp (Dayton
 DTA120) → exciter (Dayton), straight through, no pedal in between — see ground-rules §4.5 for
@@ -26,18 +26,20 @@ sit between guitar and Bela was **removed 2026-09-13** after being confirmed as 
 a ground loop (ground-rules §4.4) — a passive DI box is on order to restore buffering without
 reintroducing that. Also measured this session: input gain (10 dB, Bela's own PGA),
 whole-loop round-trip latency (2.20 ms), and the feedback threshold (bracketed between
-DTA120=12 o'clock and 100%). A one-cell adaptive regulator passed the "second partial blooms"
-test on the **old Mac/SuperCollider rig** (`sc/gen1_cell.scd`); it has now been ported to
-C++ for Bela (`bela/gen1-cell/`, compiles clean, **not yet run against the real exciter** —
-that real-loop validation session with Abel is next). See `docs/phase-plan.md`'s Status
-block for the full handover.
+DTA120=12 o'clock and 100%). The one-cell adaptive regulator that passed the "second partial
+blooms" test on the **old Mac/SuperCollider rig** (`sc/gen1_cell.scd`) has now been ported to
+C++ for Bela (`bela/gen1-cell/`) and **passed the same test for real, on this rig**: DTA120=
+100%, Abel present, verdict "a nicely blooming chord, always 3-4 notes present." Some
+distortion audible late in the take, cause undetermined between the DSP ceiling and the
+exciter (which turns out not to be fixed/mounted yet) — noted, not blocking. See
+`docs/phase-plan.md`'s Status block for the full handover into Phase 5.
 
 | Piece | State |
 |---|---|
 | `docs/phase-plan.md` | Live plan — its Status block is the up-to-date handover summary |
 | `docs/ground-rules-and-facts.md` | Current. See §3.1 for the Gem hardware, §4.4 for the M4 ground-loop finding, §4.5 for the fail-safe decision |
 | `sc/gen1_cell.scd` | One adaptive cell, passed the "second partial blooms" test **on the old Mac rig** — ported to Bela C++ below |
-| `bela/gen1-cell/` | Phase 4 port of the one-cell regulator. Compiles clean on hardware, **not yet run against the real exciter** — needs a real-loop session with Abel |
+| `bela/gen1-cell/` | Phase 4 port of the one-cell regulator. **Passed its real-loop test 2026-09-13** (DTA120=100%, Abel present) — see `logs/2026-09-13/185836_first-cell-take-dta120-100pct.json` |
 | `bela/detector-passthrough/` | Growth-rate detector, running on hardware, but its arm threshold is known miscalibrated for realistic near-unity jumps — flagged, not yet fixed |
 | `bela/latency-check/`, `host/rig/analyse_latency.py` | Whole-loop round-trip latency via a burst through the exciter + cross-correlation |
 | `host/harness/metrics.py` | Implemented, run against real recorded audio already |

@@ -88,6 +88,7 @@
   "exciter": {
     "model": "Dayton Audio (surface transducer, exact model TBD)",
     "mounting_position": null,
+    "_mounting_note_2026-09-13": "NOT fixed/clamped -- currently just resting on the guitar body, per Abel during the first gen1-cell real-loop take (logs/2026-09-13/185836_first-cell-take-dta120-100pct.json). Abel's diagnosis of that take's from-~16s-onward distortion: 'the exciter can jump and produce distortion if driven hard enough' when unmounted like this, an alternative/additional explanation to the DSP output ceiling (peak_sample hit 0.5 in that take, so both are live candidates, not distinguished yet). Matters for every take until it's actually mounted: audible distortion at high drive isn't unambiguously a DSP problem while this is true. CLAUDE.md rule 5 treats mounting position as a fixed rig-profile constant -- it isn't one yet in practice, this is the gap between that rule and the current physical state, not a rule violation (nothing was moved mid-session to change a result).",
     "impedance_ohms": null,
     "power_handling_w": null
   },
