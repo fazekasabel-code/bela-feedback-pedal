@@ -90,6 +90,8 @@ Build the analysis layer of §6.1: STFT on an auxiliary task (long window, short
 
 Capturing/measuring a jump was the real open item; it's now been done, just with an unexpected result. Abel's call, 2026-09-13: move on to Phase 4 and come back to retuning this threshold later rather than block on it now.
 
+**Follow-up sweep, same session:** six gain steps (1.0, 1.5, 2.0, 3.0, 5.0, 10.0) back-to-back to map the transition. Clean break: 1.0-1.5 grows slowly over seconds and never arms in an 8s window (matches the isolated 1.3 trial above); ≥2.0 grows explosively, arms in 45-84ms, and slams into the ceiling immediately. Caveat: only 2s settle between stages means the higher-gain stages likely re-amplify the previous stage's residual ringing rather than starting cold, which plausibly explains why 5.0/10.0 armed fast here but not in the isolated trial above — so this doesn't overturn the threshold-miscalibration finding, it sharpens it: the detector is fine once a jump is large, it's the realistic near-unity case it misses. Full data: `logs/2026-09-13/183505_jump-sweep-v3-dta120-100pct.json`.
+
 **Exit:** detection latency after a jump is under the budget, with no false arming during ordinary playing. **Partly met:** no false arming is now demonstrated both synthetically and against real recorded audio; the latency-after-a-jump half needs a real jump, still to come.
 
 ---

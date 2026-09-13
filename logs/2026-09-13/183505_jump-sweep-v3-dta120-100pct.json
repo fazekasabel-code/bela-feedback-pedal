@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "run_name": "jump-sweep-v3-dta120-100pct",
+  "provenance": {
+    "git_commit": "6aeb0a4",
+    "git_dirty": false,
+    "rig_profile_sha256": "de08abb038dacdd2982b62cf496c72f3a4cdf595665529a3cdc8b9ee5ec082e6",
+    "rig_profile_version": 3,
+    "recorded_at": "2026-09-13T18:35:05.256419+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit"
+  },
+  "params": {
+    "dta120_gain": "100% (max)",
+    "board_input_gain_db": 10,
+    "baseline_gain": 0.2,
+    "settle_s": 2.0,
+    "watch_s_per_stage": 8.0,
+    "stages_gain": [
+      1.0,
+      1.5,
+      2.0,
+      3.0,
+      5.0,
+      10.0
+    ]
+  },
+  "metrics": {
+    "per_stage": [
+      {
+        "gain": 1.0,
+        "armed_at_s": null,
+        "peak_out_dbfs": -65.7
+      },
+      {
+        "gain": 1.5,
+        "armed_at_s": null,
+        "peak_out_dbfs": -34.3
+      },
+      {
+        "gain": 2.0,
+        "armed_at_s": 0.046,
+        "peak_out_dbfs": -23.4
+      },
+      {
+        "gain": 3.0,
+        "armed_at_s": 0.084,
+        "peak_out_dbfs": -6.0
+      },
+      {
+        "gain": 5.0,
+        "armed_at_s": 0.045,
+        "peak_out_dbfs": -6.0
+      },
+      {
+        "gain": 10.0,
+        "armed_at_s": 0.045,
+        "peak_out_dbfs": -6.0
+      }
+    ]
+  },
+  "audio_path": "logs/2026-09-13/jump_sweep_outputs.wav",
+  "notes": "Abel: characterise what to watch for across gain steps from ~unity to absurdly high, one continuous board run (6 stages, 2s settle at baseline=0.2 + 8s watch per stage) rather than 6 restarts. Clear transition: gain 1.0-1.5 grows slowly over seconds and never arms within the 8s window (matches the earlier isolated 1.3 trial); gain>=2.0 grows explosively, arms in 45-84ms, and immediately hits the -6dBFS ceiling. CAVEAT, not a clean result on its own: only 2s settle between back-to-back stages means the higher-gain stages likely re-amplify residual ringing from the previous stage rather than starting from a truly cold, silent baseline each time -- this plausibly explains why 5.0 and 10.0 armed fast here but the earlier ISOLATED, fresh-start 5.0 trial (see detector-jump-latency-v3-dta120-100pct.json) did not arm at all in 3s and was broadband (dominance=6.8dB). Did not attempt to slice/analyse this recording per-stage offline -- the wav is 135.6s against ~60s of active script time (board was already recording before the script connected), so stage boundaries in the file are not precisely known; the timing conclusions above come from the live pybela poll, which IS precisely timed against each trigger. Net finding: once a jump is large/fast enough, the detector catches it quickly (though 45-84ms is a bit over the <25ms budget in ground-rules 7); it is specifically the realistic, near-unity, clean single-partial case (gain 1.0-1.5 here, matching the earlier isolated 1.3 trial) where it currently misses -- reinforcing the kArmGrowthDbPerFrame miscalibration already flagged, not a new finding on its own."
+}
