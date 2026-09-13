@@ -68,12 +68,25 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 > frequency slew alone wasn't enough — it let an old, unrelated cut sweep smoothly THROUGH the
 > new target frequency instead of jumping there, still audible as a notch); and
 > **`bela/gen1-multicell-live/`** — the same N=12/duck-safe allocator with the sweep-kick
-> removed entirely (for live playing) and no custom GUI code needed, since Bela's own
-> Watcher/Gui plumbing already plots every declared Watcher variable live in the browser IDE.
-> **Not yet done:** an actual live-playing session on this build — it's deployed and compiles
-> clean, not yet played. See phase-plan Phase 5 section for what's still deliberately not done
-> otherwise (growth-rate arming, the formal jump test, the optional adaptive notch). Everything
-> above is logged
+> removed entirely (for live playing). That assumed Bela's own Watcher/Gui plumbing would
+> just plot live in the browser IDE with no extra code — **it didn't: the browser GUI is
+> blank**, confirmed as a real, board-level bug, not anything of ours (survives a clean
+> reboot, reproduces on a totally different pre-existing project, and a stock Bela example
+> using core Bela's own `Gui` class loads fine in the same browser — narrows it to the
+> vendored Watcher library's browser-facing code on this Bela version specifically, not
+> fixable from inside this repo, not chased further). Debugging that surfaced a second, real
+> bug that WAS fixed: pybela's own streaming failed too, for a different reason — this repo's
+> Watcher variables are all written once per render() block, but pybela's protocol turns out
+> to expect every watched variable written every audio sample (confirmed: `bela/watcher-check/`,
+> the one project already doing that, was the one thing that worked). Fixed at the source in
+> `bela/gen1-multicell/` and `bela/gen1-multicell-live/`; the same fix is flagged as a
+> follow-up for `detector-passthrough`/`gen1-cell`/`feedback-ramp`/`harness-passthrough`, which
+> still have the old pattern. **`host/rig/multicell_monitor.py`** is the practical result: a
+> live terminal view over pybela, standing in for the still-broken browser GUI. **Not yet
+> done:** an actual live-playing session — the tooling is now confirmed working end to end,
+> nobody's played through it yet. See phase-plan Phase 5 section for what's still deliberately
+> not done otherwise (growth-rate arming, the formal jump test, the optional adaptive notch).
+> Everything above is logged
 > under `logs/2026-09-13/`; see `docs/ground-rules-and-facts.md` §4.4 for the ground-loop
 > story and phase-plan Phase 1/3 sections below for the full measurement writeups.
 
@@ -269,19 +282,37 @@ well-separated tones didn't exercise.
   deliberately slower than the 20ms frequency slew so the notch is essentially gone before the
   frequency has finished moving.
 - **`bela/gen1-multicell-live/`** — same N=12, same duck-safe allocator, sweep-kick removed
-  entirely (opposite of what a live session wants) rather than merely disabled. No custom GUI
-  code: Bela's own Watcher/Gui plumbing, already wired into every project here, plots every
-  declared Watcher variable live in the browser IDE with no extra work — per-cell
-  bound/freq/cut/partial-level ×12, bind/release/steal totals, in/out peak, muted, CPU%.
+  entirely (opposite of what a live session wants) rather than merely disabled. Expected Bela's
+  own Watcher/Gui plumbing to plot live in the browser IDE with no extra work — **it doesn't**:
+  the browser GUI is blank for every project in this repo, confirmed as a real bug independent
+  of our code (survives a clean board reboot; reproduces on `detector-passthrough`, unchanged
+  since Phase 1; a stock Bela example using core Bela's own `Gui` class, not the vendored
+  Watcher library's, loads fine in the same browser). Narrows to the vendored Watcher library's
+  browser-facing code on this Bela version — not something to fix from inside this repo.
+- **Found and fixed a second bug along the way**: pybela's own streaming (Python-side, the
+  mechanism Phase 1 already confirmed working) was *also* failing, for an unrelated reason —
+  `'NoneType' object has no attribute 'groups'` from inside pybela's own websocket handling.
+  Traced to every project here except `bela/watcher-check/` writing its Watcher telemetry once
+  per render() *block* rather than every audio *sample* — confirmed by moving
+  `detector-passthrough`'s Watcher writes into its per-sample loop and watching the same pybela
+  call start working. Fixed at the source in `gen1-multicell`/`gen1-multicell-live`'s
+  `render()` (redundant per-sample writes of an already-known block-level value, e.g. a peak
+  accumulator, are harmless); flagged as a follow-up for the four older projects that still
+  have the once-per-block pattern.
+- **`host/rig/multicell_monitor.py`** (new) — a live terminal view over the now-working pybela
+  path, standing in for the still-broken browser GUI: per-cell bound/freq/cut/level, bind/
+  release/steal totals, in/out peak, CPU%, redrawn a few times a second while a project runs.
 
 Both variants compile clean; `gen1-multicell` was run briefly (foreground, to read the real
 CPU%) and had to be stopped explicitly when a local `timeout` around `ssh -t` didn't propagate
 to the remote process tree — under a minute total regardless (the board's clock being UTC, 2h
 off local, made it look longer for a moment), and the 120s watchdog would have caught it either
 way, but `host/rig/*_run.py`'s background+`stop_running.sh` pattern is the one to actually rely
-on, not a foreground timeout.
+on, not a foreground timeout. `multicell_monitor.py` itself confirmed working end to end against
+a running `gen1-multicell-live` (no signal playing, so nothing bound — the plumbing is what was
+being checked).
 
-**Exit:** 3+ simultaneous partials sustained in the simulator *and* on the rig; jump regulation inside the latency budget; no chatter, no clicks, no runaway. **Partly met**: 4 simultaneous partials sustained on the real rig for 30+s under the sweep-kick A/B above — but that was a synthetic seed signal, not live playing, and the simulator half still doesn't exist (Phase 2 still deliberately skipped). **A live-playing session on `gen1-multicell-live` is the next real-loop thing to do** — deployed, not yet played.
+**Exit:** 3+ simultaneous partials sustained in the simulator *and* on the rig; jump regulation inside the latency budget; no chatter, no clicks, no runaway. **Partly met**: 4 simultaneous partials sustained on the real rig for 30+s under the sweep-kick A/B above — but that was a synthetic seed signal, not live playing, and the simulator half still doesn't exist (Phase 2 still deliberately skipped). **A live-playing session on `gen1-multicell-live`, watched via `multicell_monitor.py`, is the next real-loop thing to do** — the tooling is confirmed working, nobody's played through it yet.
 
 ---
 

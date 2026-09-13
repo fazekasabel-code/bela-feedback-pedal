@@ -600,10 +600,16 @@ void render(BelaContext *context, void *userData)
 	}
 
 	float inPeak = 0.0f, outPeak = 0.0f;
-	std::array<float, kNumCells> lastPartialDb{};
-	std::array<float, kNumCells> lastCutDb{};
 	bool nonFiniteThisBlock = false;
 	const bool bypass = (gWatchBypass.get() != 0u);
+
+	// gCellState doesn't change within one render() call (only the aux task
+	// writes it, between calls) -- safe to compute once and republish every
+	// sample below.
+	unsigned int boundCount = 0;
+	for(int c = 0; c < kNumCells; c++) {
+		if(gCellState[c] == kBound) boundCount++;
+	}
 
 	for(unsigned int n = 0; n < context->audioFrames; n++) {
 		const uint64_t frames = context->audioFramesElapsed + n;
@@ -662,9 +668,15 @@ void render(BelaContext *context, void *userData)
 				nonFiniteThisBlock = true;
 			}
 
-			lastPartialDb[c] = partialDb;
-			lastCutDb[c] = cutDb;
 			gCellCutDbLast[c] = cutDb;
+
+			// Published every sample, not once per block -- see the render()-top
+			// comment (and the commit message) on why: Watcher/pybela's streaming
+			// protocol turns out to expect audio-rate writes, not block-rate ones.
+			gWatchCellBound[c] = (gCellState[c] == kBound) ? 1u : 0u;
+			gWatchCellFreqHz[c] = freqNow;
+			gWatchCellPartialDb[c] = partialDb;
+			gWatchCellCutDb[c] = cutDb;
 		}
 
 		// bypass (Watcher-settable, see header note): cells above still ran in
@@ -688,19 +700,21 @@ void render(BelaContext *context, void *userData)
 		}
 		const float ao = std::fabs(out);
 		if(ao > outPeak) outPeak = ao;
+
+		// Published every sample -- see the per-cell comment above for why.
+		gWatchInPeak = inPeak;
+		gWatchOutPeak = outPeak;
+		gWatchMuted = gMuted ? 1u : 0u;
+		gWatchBindEvents = gBindEventsTotal;
+		gWatchReleaseEvents = gReleaseEventsTotal;
+		gWatchStealEvents = gStealEventsTotal;
+		gWatchCpuPercent = gCpuData ? gCpuData->percentage : 0.0f;   // already 0-100, see
+		                                                              // RTAudio.cpp's Bela_cpuTic
+		gWatchCellsBoundCount = boundCount;
 	}
 
 	gInputWriter.setSamples(gInputBuf);
 	gOutputWriter.setSamples(gOutputBuf);
-
-	gWatchInPeak = inPeak;
-	gWatchOutPeak = outPeak;
-	gWatchMuted = gMuted ? 1u : 0u;
-	gWatchBindEvents = gBindEventsTotal;
-	gWatchReleaseEvents = gReleaseEventsTotal;
-	gWatchStealEvents = gStealEventsTotal;
-	gWatchCpuPercent = gCpuData ? gCpuData->percentage : 0.0f;   // already 0-100, see
-	                                                              // RTAudio.cpp's Bela_cpuTic
 
 	// Periodic CPU print -- phase-plan.md Phase 5: "watch CPU load as N grows".
 	// Watcher exposes it for pybela too, but a plain rt_printf means it shows up
@@ -711,17 +725,6 @@ void render(BelaContext *context, void *userData)
 		sLastCpuPrintS = elapsedS;
 		rt_printf("[%.1fs] audio thread CPU: %.1f%%\n", elapsedS, gCpuData->percentage);
 	}
-
-	unsigned int boundCount = 0;
-	for(int c = 0; c < kNumCells; c++) {
-		const bool bound = (gCellState[c] == kBound);
-		boundCount += bound ? 1u : 0u;
-		gWatchCellBound[c] = bound ? 1u : 0u;
-		gWatchCellFreqHz[c] = gFreqSlewed[c];
-		gWatchCellPartialDb[c] = lastPartialDb[c];
-		gWatchCellCutDb[c] = lastCutDb[c];
-	}
-	gWatchCellsBoundCount = boundCount;
 
 	gFrameCount += context->audioFrames;
 }
