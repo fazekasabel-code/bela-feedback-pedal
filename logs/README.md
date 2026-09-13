@@ -28,3 +28,17 @@ results there were already flagged `_distrusted_2026-09-12` in `rig-profile.json
 hardware check; the ground loop is very plausibly what that check found, on top of the rig
 having physically changed since). Runs from **2026-09-13 onward** are **v3**, direct
 guitar-to-Bela, unbuffered, until a passive DI box is added and the profile bumps again.
+
+**2026-09-13, same day: profile bumped v3 → v4.** The exciter — not fixed/mounted at all
+through the whole v3 period, per `rig-profile.json`'s `exciter._mounting_note_2026-09-13` —
+was "secured better" (Abel's words; exact method/position still undescribed,
+`exciter.mounting_position` stays null) ahead of Phase 5. Because both v3 and v4 runs land in
+the same `2026-09-13/` directory, the date alone doesn't distinguish them here — go by
+`provenance.rig_profile_sha256` in each record, or by name: everything up to and including
+`185836_first-cell-take-dta120-100pct.json` (the Phase 4 gen1-cell pass, latency-check, and
+the feedback-ramp/jump-sweep takes) is **v3**, measured/heard through the old, looser
+exciter mount; anything after it is **v4**. The v3 round-trip latency (2.20 ms) and feedback-
+threshold bracket are not re-verified under v4 and shouldn't be assumed to still hold exactly
+— the mechanical coupling to the body changed, which the loop's physics runs through. Phase
+4's qualitative pass (a second partial blooms) is a DSP-behaviour finding, not re-tested under
+v4 but with no particular reason a firmer mount would undo it.
