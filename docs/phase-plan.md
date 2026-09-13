@@ -8,15 +8,27 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 
 ---
 
-> **Status.** Not starting from zero: the proxy metrics (`host/harness/metrics.py`), the
-> log-record writer (`host/harness/logrecord.py`), an I/O bring-up tool, and a working
-> **one adaptive cell** (`sc/gen1_cell.scd`) already exist and have **passed the "second
-> partial blooms" test** (Phase 4). That run exposed a detector defect — pitch tracking
-> finds a fundamental, not the dominant partial — and replacing it with the FFT peak
-> picking of §6.1 is the first real DSP task here (Phase 3). The Phase 2 loop simulator has
-> **not been built yet**. Every Gem hardware number this plan assumes is unverified until
-> Phase 0/1 measures it — see **§3.1** in
-> [`ground-rules-and-facts.md`](ground-rules-and-facts.md).
+> **Status, 2026-09-13 — handover into Phase 4.** Rig is v3 in `rig-profile.json`: the M4
+> buffer/preamp is **out** (confirmed ground-loop source, see ground-rules §4.4), guitar runs
+> **direct/unbuffered into Bela ch0**, exciter is fed from Bela **ch1** via the DTA120 — both
+> confirmed by direct measurement, not assumption. Measured this session: input gain staged
+> to **10 dB** on Bela's own PGA (ch0 lands ‑8.8 to ‑11.6 dBFS peak, mezzoforte); whole-loop
+> round-trip latency **2.20 ms** (`bela/latency-check/`, through the real exciter→body→pickup
+> path, not a cable loopback); feedback threshold bracketed between DTA120=12 o'clock (no
+> growth, even at loop-gain 1.0 held 60s) and 100% (threshold ≈ loop-gain 1.0, gentle ~1 dB/s
+> growth) — not narrowed further, Abel's call. The growth-rate detector (Phase 3,
+> `bela/detector-passthrough/`) exists and runs, but **its arm threshold is now known
+> miscalibrated**: it reliably catches large/fast manufactured jumps (gain≥2, arms in
+> 45–84 ms) but misses the realistic near-unity case (gain 1.0–1.5, clean single partial,
+> confirmed by `analyse_take.py`) that actually matters — flagged, not fixed, deliberately
+> deferred past Phase 4. **Phase 2 (the loop simulator) is deliberately skipped for now**,
+> not forgotten: it needs a transfer-function measurement that hasn't been done, and its
+> whole value (autonomous overnight search without Abel present) matters less while Abel is
+> available for iterative real-rig testing — revisit once Phase 5's wider parameter space
+> makes that need concrete. **Phase 4 (`sc/gen1_cell.scd`'s one cell, ported to C++ for Bela)
+> has not been started on this platform** — that's the next task. Everything above is logged
+> under `logs/2026-09-13/`; see `docs/ground-rules-and-facts.md` §4.4 for the ground-loop
+> story and phase-plan Phase 1/3 sections below for the full measurement writeups.
 
 ---
 

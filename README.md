@@ -17,24 +17,30 @@ sequence of work.
 
 ## Status
 
-**On the Bela Gem Stereo, arrived 2026-09-10. Bring-up under way.** Signal chain as wired,
-2026-09-13: Epiphone (humbucker) → Bela in **directly, unbuffered** (mono guitar into a
-stereo input — expect channel 0/left only); Bela out → power amp (Dayton DTA120) → exciter
-(Dayton), straight through, no pedal in between — see ground-rules §4.5 for why this build
-carries no dedicated hardware kill switch. The M4 buffer/preamp that used to sit between
-guitar and Bela was **removed 2026-09-13** after being confirmed as the source of a ground
-loop (ground-rules §4.4) — a passive DI box is on order to restore buffering without
-reintroducing that. A one-cell adaptive regulator has already passed the "second partial
-blooms" test; that code and the harness carry over.
+**On the Bela Gem Stereo, arrived 2026-09-10. Handed over into Phase 4, 2026-09-13.** Signal
+chain as wired: Epiphone (humbucker) → Bela in **directly, unbuffered** (mono guitar,
+**confirmed on channel 0/left** by direct measurement); Bela out ch1 → power amp (Dayton
+DTA120) → exciter (Dayton), straight through, no pedal in between — see ground-rules §4.5 for
+why this build carries no dedicated hardware kill switch. The M4 buffer/preamp that used to
+sit between guitar and Bela was **removed 2026-09-13** after being confirmed as the source of
+a ground loop (ground-rules §4.4) — a passive DI box is on order to restore buffering without
+reintroducing that. Also measured this session: input gain (10 dB, Bela's own PGA),
+whole-loop round-trip latency (2.20 ms), and the feedback threshold (bracketed between
+DTA120=12 o'clock and 100%). A one-cell adaptive regulator passed the "second partial blooms"
+test on the **old Mac/SuperCollider rig** (`sc/gen1_cell.scd`) but has not yet been ported to
+C++ for Bela — that's Phase 4, next up. See `docs/phase-plan.md`'s Status block for the full
+handover.
 
 | Piece | State |
 |---|---|
-| `docs/phase-plan.md` | Live plan. Adjust for the Gem's specifics as you go |
-| `docs/ground-rules-and-facts.md` | Current. Physics/DSP/metrics unchanged; see §3.1 for the Gem hardware, §4.4 for the M4 ground-loop finding, §4.5 for the fail-safe decision |
-| `sc/gen1_cell.scd` | One adaptive cell, passed the "second partial blooms" test. Detector needs replacing (FFT peak picking, not pitch tracking) |
+| `docs/phase-plan.md` | Live plan — its Status block is the up-to-date handover summary |
+| `docs/ground-rules-and-facts.md` | Current. See §3.1 for the Gem hardware, §4.4 for the M4 ground-loop finding, §4.5 for the fail-safe decision |
+| `sc/gen1_cell.scd` | One adaptive cell, passed the "second partial blooms" test **on the old Mac rig** — not yet ported to Bela C++ (Phase 4) |
+| `bela/detector-passthrough/` | Growth-rate detector, running on hardware, but its arm threshold is known miscalibrated for realistic near-unity jumps — flagged, not yet fixed |
+| `bela/latency-check/`, `host/rig/analyse_latency.py` | Whole-loop round-trip latency via a burst through the exciter + cross-correlation |
 | `host/harness/metrics.py` | Implemented, run against real recorded audio already |
 | `host/rig/` | I/O bring-up + loop runner for the Gem |
-| `rig-profile.json` | v3, platform `bela-gem-stereo`; M4-era gain-staging retired 2026-09-13, most else still `null` |
+| `rig-profile.json` | v3, platform `bela-gem-stereo` — input gain, round-trip latency, and the feedback threshold bracket are measured; transfer function, partial map, and expression pedal calibration still `null` |
 | `bela/gen1-passthrough/` | Built and run on hardware, 2026-09-11 — watchdog, ceiling, mute-on-error all confirmed |
 | `bela/io-check-input/` | Output-silent input-level diagnostic. Confirmed the signal chain end to end, 2026-09-11 |
 | `bela/watcher-check/`, `bela/harness-passthrough/`, `bela/detector-passthrough/`, `bela/feedback-ramp/` | Watcher/pybela streaming, the Phase 1 host harness, the growth-rate detector, and the loop-gain ramp tool — all built and run on hardware, see phase-plan.md |
