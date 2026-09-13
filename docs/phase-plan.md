@@ -25,8 +25,20 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 > not forgotten: it needs a transfer-function measurement that hasn't been done, and its
 > whole value (autonomous overnight search without Abel present) matters less while Abel is
 > available for iterative real-rig testing — revisit once Phase 5's wider parameter space
-> makes that need concrete. **Phase 4 (`sc/gen1_cell.scd`'s one cell, ported to C++ for Bela)
-> has not been started on this platform** — that's the next task. Everything above is logged
+> makes that need concrete. **Phase 4 is built, not yet validated on hardware:**
+> `bela/gen1-cell/` ports `sc/gen1_cell.scd`'s one adaptive cell to C++, compiled clean on
+> this board's toolchain (`build_project.sh -n`, compile-only, never run — ground rule 2
+> needs Abel present and the rig confirmed live before a real-loop test). One deliberate
+> divergence from the SC patch, worth flagging because it isn't just a port: rather than
+> SC's autocorrelation pitch tracker, the cell binds to a partial via the Phase 3 STFT
+> growth-detector's machinery (already hardware-validated), but **by magnitude/rank, not by
+> growth rate** — the growth-arm threshold logged above as miscalibrated for this rig's real
+> (~1-2.5 dB/s) growth would otherwise likely never fire for the case this cell exists to
+> regulate. See `bela/gen1-cell/render.cpp`'s header comment for the full reasoning,
+> including the other deliberate simplification (one envelope-follower stage, not SC's two
+> cascaded ones). **Next: a real-loop validation session with Abel** — the Phase 4 exit
+> criterion (hold the dominant partial, watch a second one bloom) needs ears and the rig
+> live, not just a clean compile. Everything above is logged
 > under `logs/2026-09-13/`; see `docs/ground-rules-and-facts.md` §4.4 for the ground-loop
 > story and phase-plan Phase 1/3 sections below for the full measurement writeups.
 
@@ -118,7 +130,18 @@ The success test is specific and it is audible: **hold the dominant partial at i
 
 Tune attack, release, Q and target on the simulator; validate a shortlist on the rig; Abel rates.
 
-**Exit:** on the real rig, a second partial reliably blooms, and feedback sustains rather than dying.
+**Built, 2026-09-13, not yet run on hardware.** `bela/gen1-cell/` — compiles clean on this
+board's toolchain (compile-only check, never run against the exciter; ground rule 2 needs
+Abel present and the rig confirmed live first). Phase 2's simulator being skipped (see Status
+block above) means this hasn't been tuned against anything yet either — it's SC's original
+defaults (target -24 dB, Q 10, attack 3 ms, release 400 ms, max cut 30 dB), carried over
+untouched, not a result of any search. Binds its one cell to a partial via Phase 3's
+STFT/growth-detector machinery reused as an N=1 allocator, but by loudest-stable-peak rank
+rather than growth rate — see the file's header comment for why (the growth-arm threshold
+flagged miscalibrated in Phase 3's status above would likely never fire for this rig's real
+growth rates). Next step is a real-loop session with Abel to actually run the exit test below.
+
+**Exit:** on the real rig, a second partial reliably blooms, and feedback sustains rather than dying. **Not yet met** — needs the real-loop session above.
 
 ---
 

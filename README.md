@@ -27,15 +27,17 @@ a ground loop (ground-rules §4.4) — a passive DI box is on order to restore b
 reintroducing that. Also measured this session: input gain (10 dB, Bela's own PGA),
 whole-loop round-trip latency (2.20 ms), and the feedback threshold (bracketed between
 DTA120=12 o'clock and 100%). A one-cell adaptive regulator passed the "second partial blooms"
-test on the **old Mac/SuperCollider rig** (`sc/gen1_cell.scd`) but has not yet been ported to
-C++ for Bela — that's Phase 4, next up. See `docs/phase-plan.md`'s Status block for the full
-handover.
+test on the **old Mac/SuperCollider rig** (`sc/gen1_cell.scd`); it has now been ported to
+C++ for Bela (`bela/gen1-cell/`, compiles clean, **not yet run against the real exciter** —
+that real-loop validation session with Abel is next). See `docs/phase-plan.md`'s Status
+block for the full handover.
 
 | Piece | State |
 |---|---|
 | `docs/phase-plan.md` | Live plan — its Status block is the up-to-date handover summary |
 | `docs/ground-rules-and-facts.md` | Current. See §3.1 for the Gem hardware, §4.4 for the M4 ground-loop finding, §4.5 for the fail-safe decision |
-| `sc/gen1_cell.scd` | One adaptive cell, passed the "second partial blooms" test **on the old Mac rig** — not yet ported to Bela C++ (Phase 4) |
+| `sc/gen1_cell.scd` | One adaptive cell, passed the "second partial blooms" test **on the old Mac rig** — ported to Bela C++ below |
+| `bela/gen1-cell/` | Phase 4 port of the one-cell regulator. Compiles clean on hardware, **not yet run against the real exciter** — needs a real-loop session with Abel |
 | `bela/detector-passthrough/` | Growth-rate detector, running on hardware, but its arm threshold is known miscalibrated for realistic near-unity jumps — flagged, not yet fixed |
 | `bela/latency-check/`, `host/rig/analyse_latency.py` | Whole-loop round-trip latency via a burst through the exciter + cross-correlation |
 | `host/harness/metrics.py` | Implemented, run against real recorded audio already |
