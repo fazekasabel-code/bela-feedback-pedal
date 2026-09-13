@@ -3,13 +3,18 @@ Live terminal monitor for bela/gen1-multicell-live/, via pybela -- built 2026-09
 as a workaround for Bela's own browser GUI (the WSServer-based live-plot view in the
 IDE), which fails to connect from every real browser tried (Edge, and this repo's own
 headless browser tool): a WebSocket error immediately after the handshake (code 1006).
-Reproduced after a from-scratch reboot and on a completely different, previously-
-working project (bela/detector-passthrough/), and NOT fixed by the render()-side fix
-below either -- a stock Bela example project's own GUI (which uses core Bela's `Gui`
-class directly, not the vendored Watcher library's GUI integration) loaded fine on the
-same board/browser, which narrows this to something in the vendored Watcher library's
-browser-facing code on this particular Bela version. Not something to chase further
-here; worth reporting upstream if it matters later.
+Root-caused, not left a mystery: this board's Bela core is on the `master` branch
+(`git rev-parse --abbrev-ref HEAD` on the board), and pybela's own README says its
+`watcher` library "currently only works with the Bela `dev` branch" -- confirmed via
+web search against pybela's and BelaPlatform/watcher's own docs. The commit that first
+vendored Watcher into this repo already flagged that branch mismatch in passing but
+treated two compile fixes as sufficient; they weren't, for this. Corroborated
+independently too: reproduces after a clean reboot and on a completely different,
+previously-working project (bela/detector-passthrough/); a stock Bela example project
+using core Bela's own `Gui` class (not Watcher's) loads fine in the same browser.
+Actually fixing it means switching this board's Bela core to `dev` and re-validating
+basic audio from scratch -- deferred deliberately (Abel's call, 2026-09-13), not
+attempted here.
 
 Getting this far surfaced a second, real, FIXED bug along the way: pybela's own
 streaming (confirmed working in principle since 2026-09-11, host/rig/watcher_check.py)

@@ -70,19 +70,27 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 > **`bela/gen1-multicell-live/`** — the same N=12/duck-safe allocator with the sweep-kick
 > removed entirely (for live playing). That assumed Bela's own Watcher/Gui plumbing would
 > just plot live in the browser IDE with no extra code — **it didn't: the browser GUI is
-> blank**, confirmed as a real, board-level bug, not anything of ours (survives a clean
-> reboot, reproduces on a totally different pre-existing project, and a stock Bela example
-> using core Bela's own `Gui` class loads fine in the same browser — narrows it to the
-> vendored Watcher library's browser-facing code on this Bela version specifically, not
-> fixable from inside this repo, not chased further). Debugging that surfaced a second, real
-> bug that WAS fixed: pybela's own streaming failed too, for a different reason — this repo's
-> Watcher variables are all written once per render() block, but pybela's protocol turns out
-> to expect every watched variable written every audio sample (confirmed: `bela/watcher-check/`,
-> the one project already doing that, was the one thing that worked). Fixed at the source in
-> `bela/gen1-multicell/` and `bela/gen1-multicell-live/`; the same fix is flagged as a
-> follow-up for `detector-passthrough`/`gen1-cell`/`feedback-ramp`/`harness-passthrough`, which
-> still have the old pattern. **`host/rig/multicell_monitor.py`** is the practical result: a
-> live terminal view over pybela, standing in for the still-broken browser GUI. **Not yet
+> blank**. Root-caused, not left as a mystery: this board's Bela core is on the **`master`**
+> branch (confirmed: `git rev-parse --abbrev-ref HEAD` on the board), and pybela's own README
+> states plainly that its `watcher` library "currently only works with the Bela `dev` branch."
+> An earlier session already half-noticed this when Watcher was first vendored (that commit's
+> own message: "this board's Bela (master, not the `dev` branch pybela's docs assume)") but
+> treated two compile fixes as sufficient — they weren't, for the browser-facing behaviour.
+> Confirmed independent of that theory too: survives a clean reboot; reproduces on
+> `detector-passthrough` (unchanged since Phase 1); a stock Bela example using core Bela's own
+> `Gui` class (not Watcher's) loads fine in the same browser. **Fixing it for real means
+> switching this board's Bela core to `dev` and re-validating basic audio from scratch — Abel's
+> call, 2026-09-13: not tonight**, stick with the pybela-based workaround instead; revisit
+> deliberately later if the browser GUI matters enough to justify that risk. Debugging this did
+> surface a second, real bug that WAS fixed regardless of branch: pybela's own streaming failed
+> too, for a different, unrelated reason — this repo's Watcher variables are all written once
+> per render() block, but pybela's protocol expects every watched variable written every audio
+> sample (confirmed: `bela/watcher-check/`, the one project already doing that, was the one
+> thing that worked). Fixed at the source in `bela/gen1-multicell/` and
+> `bela/gen1-multicell-live/`; the same fix is flagged as a follow-up for
+> `detector-passthrough`/`gen1-cell`/`feedback-ramp`/`harness-passthrough`, which still have the
+> old pattern. **`host/rig/multicell_monitor.py`** is the practical result: a live terminal
+> view over pybela, standing in for the still-blank browser GUI. **Not yet
 > done:** an actual live-playing session — the tooling is now confirmed working end to end,
 > nobody's played through it yet. See phase-plan Phase 5 section for what's still deliberately
 > not done otherwise (growth-rate arming, the formal jump test, the optional adaptive notch).
@@ -284,11 +292,18 @@ well-separated tones didn't exercise.
 - **`bela/gen1-multicell-live/`** — same N=12, same duck-safe allocator, sweep-kick removed
   entirely (opposite of what a live session wants) rather than merely disabled. Expected Bela's
   own Watcher/Gui plumbing to plot live in the browser IDE with no extra work — **it doesn't**:
-  the browser GUI is blank for every project in this repo, confirmed as a real bug independent
-  of our code (survives a clean board reboot; reproduces on `detector-passthrough`, unchanged
-  since Phase 1; a stock Bela example using core Bela's own `Gui` class, not the vendored
-  Watcher library's, loads fine in the same browser). Narrows to the vendored Watcher library's
-  browser-facing code on this Bela version — not something to fix from inside this repo.
+  the browser GUI is blank for every project in this repo. Root-caused, not left as a mystery:
+  this board's Bela core is on the `master` branch (`git rev-parse --abbrev-ref HEAD` on the
+  board), and pybela's own README says its `watcher` library "currently only works with the
+  Bela `dev` branch" — confirmed via web search against pybela's and BelaPlatform/watcher's own
+  docs, not assumed. (Independently corroborated: survives a clean board reboot; reproduces on
+  `detector-passthrough`, unchanged since Phase 1; a stock Bela example using core Bela's own
+  `Gui` class, not the vendored Watcher library's, loads fine in the same browser.) The commit
+  that first vendored Watcher already flagged this branch mismatch in passing but treated two
+  compile fixes as sufficient — they weren't, for the browser-facing behaviour specifically.
+  Actually fixing it means switching this board's Bela core to `dev` and re-validating basic
+  audio from scratch before trusting the rig again — Abel's call, 2026-09-13: not tonight, the
+  pybela-based workaround is enough for now.
 - **Found and fixed a second bug along the way**: pybela's own streaming (Python-side, the
   mechanism Phase 1 already confirmed working) was *also* failing, for an unrelated reason —
   `'NoneType' object has no attribute 'groups'` from inside pybela's own websocket handling.
