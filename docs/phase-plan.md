@@ -60,11 +60,20 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 > decays back to winner-takes-all; and a new offline sandbox validated the actuator/allocator
 > logic against synthetic tones and surfaced one real, unfixed finding — a bin-exclusion radius
 > that may be too wide for closely-spaced guitar partials, worth revisiting once the (still
-> unmeasured) partial map exists. **Not yet done:** a live-playing take that reproduces the
-> sweep-kick take's stable 4-partial result — the sweep-kick is a clean synthetic seed, not a
-> substitute for hearing it played. See phase-plan Phase 5 section for what's still
-> deliberately not done otherwise (growth-rate arming, the formal jump test, the optional
-> adaptive notch). Everything above is logged
+> unmeasured) partial map exists. **Same day, three more of Abel's requests, one pass:** cell
+> pool bumped **N=4 → 12** (past the plan's own "4, then 6-8" — CPU headroom checked live, not
+> assumed: ~32% audio-thread CPU at N=12, comfortable; a units bug in the CPU%
+> reporting itself was caught and fixed in the process); **steal made click-safe** — a "rebind
+> duck" ramps the applied cut to 0 and back over 50ms on every fresh bind or steal (the
+> frequency slew alone wasn't enough — it let an old, unrelated cut sweep smoothly THROUGH the
+> new target frequency instead of jumping there, still audible as a notch); and
+> **`bela/gen1-multicell-live/`** — the same N=12/duck-safe allocator with the sweep-kick
+> removed entirely (for live playing) and no custom GUI code needed, since Bela's own
+> Watcher/Gui plumbing already plots every declared Watcher variable live in the browser IDE.
+> **Not yet done:** an actual live-playing session on this build — it's deployed and compiles
+> clean, not yet played. See phase-plan Phase 5 section for what's still deliberately not done
+> otherwise (growth-rate arming, the formal jump test, the optional adaptive notch). Everything
+> above is logged
 > under `logs/2026-09-13/`; see `docs/ground-rules-and-facts.md` §4.4 for the ground-loop
 > story and phase-plan Phase 1/3 sections below for the full measurement writeups.
 
@@ -243,7 +252,36 @@ consistent with (not proven by) that same exclusion-radius question: a plucked n
 lower harmonics can sit closer together than 129 Hz, which the sweep-kick test's
 well-separated tones didn't exercise.
 
-**Exit:** 3+ simultaneous partials sustained in the simulator *and* on the rig; jump regulation inside the latency budget; no chatter, no clicks, no runaway. **Partly met**: 4 simultaneous partials sustained on the real rig for 30+s under the sweep-kick A/B above — but that was a synthetic seed signal, not live playing, and the simulator half still doesn't exist (Phase 2 still deliberately skipped). A live-playing take reproducing the sweep-kick take's stability is the next real-loop thing to check.
+**Same day, three more requests answered in one pass**, ahead of a live-playing session:
+
+- **N bumped 4 → 12.** Nothing in the allocator/actuator assumed N=4; the only real question
+  was CPU headroom, checked live rather than assumed — a periodic `rt_printf` of
+  `Bela_cpuMonitoringGet()` read ~32% audio-thread CPU at N=12 (a units bug in that same
+  reporting — `BelaCpuData::percentage` is already 0-100 — was caught and fixed along the way;
+  it had first read as ~3245%).
+- **Steal made click-safe.** The frequency slew alone glides a stolen (or same-hop-frame
+  released-and-rebound) cell's centre smoothly, but it can still carry a substantial cut from
+  its OLD partial while that glide happens — sweeping an audible notch across every frequency
+  in between, not a click exactly but exactly the "loud sudden change" this was asked to rule
+  out. Fixed with a "rebind duck": a per-cell epoch counter, bumped on every fresh bind or
+  steal, tells the audio thread to ramp the *applied* cut (not the computed one — telemetry
+  and the steal decision itself still see the real value) down to 0 and back over 50ms,
+  deliberately slower than the 20ms frequency slew so the notch is essentially gone before the
+  frequency has finished moving.
+- **`bela/gen1-multicell-live/`** — same N=12, same duck-safe allocator, sweep-kick removed
+  entirely (opposite of what a live session wants) rather than merely disabled. No custom GUI
+  code: Bela's own Watcher/Gui plumbing, already wired into every project here, plots every
+  declared Watcher variable live in the browser IDE with no extra work — per-cell
+  bound/freq/cut/partial-level ×12, bind/release/steal totals, in/out peak, muted, CPU%.
+
+Both variants compile clean; `gen1-multicell` was run briefly (foreground, to read the real
+CPU%) and had to be stopped explicitly when a local `timeout` around `ssh -t` didn't propagate
+to the remote process tree — under a minute total regardless (the board's clock being UTC, 2h
+off local, made it look longer for a moment), and the 120s watchdog would have caught it either
+way, but `host/rig/*_run.py`'s background+`stop_running.sh` pattern is the one to actually rely
+on, not a foreground timeout.
+
+**Exit:** 3+ simultaneous partials sustained in the simulator *and* on the rig; jump regulation inside the latency budget; no chatter, no clicks, no runaway. **Partly met**: 4 simultaneous partials sustained on the real rig for 30+s under the sweep-kick A/B above — but that was a synthetic seed signal, not live playing, and the simulator half still doesn't exist (Phase 2 still deliberately skipped). **A live-playing session on `gen1-multicell-live` is the next real-loop thing to do** — deployed, not yet played.
 
 ---
 

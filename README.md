@@ -49,7 +49,8 @@ be too wide for closely-spaced guitar partials). See
 | `docs/ground-rules-and-facts.md` | Current. See §3.1 for the Gem hardware, §4.4 for the M4 ground-loop finding, §4.5 for the fail-safe decision |
 | `sc/gen1_cell.scd` | One adaptive cell, passed the "second partial blooms" test **on the old Mac rig** — ported to Bela C++ below |
 | `bela/gen1-cell/` | Phase 4 port of the one-cell regulator. **Passed its real-loop test 2026-09-13** (DTA120=100%, Abel present) — see `logs/2026-09-13/185836_first-cell-take-dta120-100pct.json` |
-| `bela/gen1-multicell/` | Phase 5: N=4 allocator generalising `gen1-cell`. **Sweep-kick A/B shows a clean pass** (4-partial texture sustained 30+s, engaged vs. disengaged decaying back to single-partial) — a live-playing take reproducing that is still open |
+| `bela/gen1-multicell/` | Phase 5: N=12 allocator (bumped from 4) generalising `gen1-cell`, with a click-safe steal (a "rebind duck" ramps cut to 0 and back on every fresh bind/steal). **Sweep-kick A/B shows a clean pass** (4-partial texture sustained 30+s, engaged vs. disengaged decaying back to single-partial) — a live-playing take reproducing that is still open |
+| `bela/gen1-multicell-live/` | Same N=12/duck-safe allocator, sweep-kick removed for live playing. No custom GUI — Bela's own Watcher/Gui plotting (already wired into every project here) shows per-cell state live in the browser IDE |
 | `host/rig/snapshot_partials.py`, `host/harness/multicell_sandbox.py` | Time-windowed re-scoring of a take, and an offline synthetic-tone allocator/actuator check — both built 2026-09-13 to diagnose gen1-multicell |
 | `bela/detector-passthrough/` | Growth-rate detector, running on hardware, but its arm threshold is known miscalibrated for realistic near-unity jumps — flagged, not yet fixed |
 | `bela/latency-check/`, `host/rig/analyse_latency.py` | Whole-loop round-trip latency via a burst through the exciter + cross-correlation |
