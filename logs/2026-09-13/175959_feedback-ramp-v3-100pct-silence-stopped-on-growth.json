@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "run_name": "feedback-ramp-v3-100pct-silence-stopped-on-growth",
+  "provenance": {
+    "git_commit": "1b99c44",
+    "git_dirty": true,
+    "rig_profile_sha256": "fbdd1ed9797d7531a79ea960b27f73b6ee940d7bca70f2c68171b4a431263b5a",
+    "rig_profile_version": 3,
+    "recorded_at": "2026-09-13T17:59:59.678725+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit"
+  },
+  "params": {
+    "dta120_gain": "100% (max)",
+    "board_input_gain_db": 10,
+    "guitar": "muted (not played), per methodology",
+    "ramp_duration_s": 60.0,
+    "watchdog_s": 120.0,
+    "output_ceiling_linear": 0.5,
+    "stopped_early": true,
+    "stop_method": "host-side live poll of in_peak/out_peak/loop_gain/muted at 20Hz via pybela; stopped the board the instant out_peak held >= -20dBFS for 3 consecutive polls",
+    "stop_elapsed_s_on_watch_clock": 82.21,
+    "loop_gain_at_stop": 1.0
+  },
+  "metrics": {
+    "path": "/Users/abel/Library/Mobile Documents/com~apple~CloudDocs/works coding/bela-feedback-pedal/logs/2026-09-13/feedback_ramp_v3_100pct_outputs.wav",
+    "duration_s": 91.02222222222223,
+    "sample_rate": 44100,
+    "dominant_hz": 579.227211197528,
+    "dominant_stability_cents": 1201.183054159892,
+    "mean_partials": 2.7668621700879767,
+    "p10_partials": 2.0,
+    "dominance_db": 11.411670435291786,
+    "top_partials": [
+      {
+        "freq_hz": 289.36969216024175,
+        "level_db": -12.754905467997249
+      },
+      {
+        "freq_hz": 289.5193565985551,
+        "level_db": -19.915866350794538
+      },
+      {
+        "freq_hz": 579.2329499100798,
+        "level_db": -2.7723070718162606
+      },
+      {
+        "freq_hz": 191.7191271662531,
+        "level_db": -18.398420054434755
+      },
+      {
+        "freq_hz": 50.02503237762077,
+        "level_db": -23.863833507893997
+      }
+    ],
+    "feedback_onset_s": 51.35092970521542,
+    "sustained_fraction": 0.4353376739435721
+  },
+  "audio_path": "logs/2026-09-13/feedback_ramp_v3_100pct_outputs.wav",
+  "notes": "loop_gain reached exactly 1.000 (ramp complete) roughly 20s before growth became visible; output sat flat at the -33 to -38 dBFS noise floor during that window, then grew clearly exponentially (tracking in/out together, not a digital artefact) from about -30 dBFS to -18.4 dBFS over ~11s before the live watch stopped it -- well clear of the -6dBFS ceiling. Growth rate near threshold is gentle (~1 dB/s average, accelerating), consistent with the loop sitting just above unity rather than deeply over it. Reading: at DTA120=100%, the acoustic loop only crosses unity once software loop-gain is itself very close to 1.0 -- see rig-profile.json loop.unity_gain_master_setting_note for the bracket this implies (threshold somewhere between 12 o'clock and 100%). analyse_take's own feedback_onset_s (51.4s) uses a much more lenient -60dBFS 'any sustained signal' threshold and should not be read as 'true' feedback onset -- the live -20dBFS/3-consecutive-poll criterion used to stop the run is the more meaningful number here. A ~50Hz partial in top_partials is the known residual ground-loop hum (ground-rules-and-facts.md 4.4), not a string partial."
+}

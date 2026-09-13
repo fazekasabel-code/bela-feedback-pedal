@@ -24,8 +24,16 @@
  * N seconds" — strictly the stronger of the two, which is the right direction
  * to round in the absence of the real mechanism.
  *
- * STATUS: NOT YET COMPILED OR RUN ON HARDWARE. Phase 0 exit criterion is that
- * this builds, runs, and passes signal.
+ * STATUS: built and run on hardware, 2026-09-11 (see docs/phase-plan.md Phase 0).
+ *
+ * 2026-09-13: guitar is mono, always on input channel kGuitarInputChannel (see
+ * rig-profile.json host.guitar_input_index, confirmed by direct measurement) --
+ * both output channels now read from that one input channel instead of each
+ * reading its own (out ch1 used to silently read the guitar's unused ch1,
+ * which is never driven, so the exciter -- fed from Bela out ch1 on this rig,
+ * see rig-profile.json host.exciter_output_index -- would have gotten nothing).
+ * The M4 used to do this mono-to-stereo duplication before it was removed
+ * (ground-rules-and-facts.md 4.4); now Bela's own code has to.
  */
 
 #include <Bela.h>
@@ -45,6 +53,11 @@ static const float kFadeInS = 0.2f;
 
 // Analog input carrying the expression pedal (Phase 6). Read but unused for now.
 static const unsigned int kExpressionPedalChannel = 0;
+
+// The guitar is mono and always on this input channel (rig-profile.json
+// host.guitar_input_index, confirmed 2026-09-13). Both output channels read
+// from here -- see header comment.
+static const unsigned int kGuitarInputChannel = 0;
 
 // ------------------------------------------------------------------- state
 
@@ -123,8 +136,9 @@ void render(BelaContext *context, void *userData)
 			float out = 0.0f;
 
 			if(!gMuted) {
-				const unsigned int inCh = (ch < context->audioInChannels) ? ch : 0;
-				const float in = audioRead(context, n, inCh);
+				// Mono guitar, always this one input channel -- not "this
+				// output channel's own input channel". See header comment.
+				const float in = audioRead(context, n, kGuitarInputChannel);
 
 				// Fail safe: any non-finite sample latches mute for the rest of
 				// the run. Do not try to recover and keep going.

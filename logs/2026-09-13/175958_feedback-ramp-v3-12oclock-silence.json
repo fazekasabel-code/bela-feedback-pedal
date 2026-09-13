@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "run_name": "feedback-ramp-v3-12oclock-silence",
+  "provenance": {
+    "git_commit": "1b99c44",
+    "git_dirty": true,
+    "rig_profile_sha256": "fbdd1ed9797d7531a79ea960b27f73b6ee940d7bca70f2c68171b4a431263b5a",
+    "rig_profile_version": 3,
+    "recorded_at": "2026-09-13T17:59:58.889726+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit"
+  },
+  "params": {
+    "dta120_gain": "12 o'clock",
+    "board_input_gain_db": 10,
+    "guitar": "muted (not played), per methodology",
+    "ramp_duration_s": 60.0,
+    "watchdog_s": 120.0,
+    "output_ceiling_linear": 0.5,
+    "note": "software loop-gain ramps 0->1 over ramp_duration_s then holds at 1 until the watchdog mutes at watchdog_s"
+  },
+  "metrics": {
+    "path": "/Users/abel/Library/Mobile Documents/com~apple~CloudDocs/works coding/bela-feedback-pedal/logs/2026-09-13/feedback_ramp_v3_12oclock_silence_outputs.wav",
+    "duration_s": 149.35074829931972,
+    "sample_rate": 44100,
+    "dominant_hz": 0.0,
+    "dominant_stability_cents": 0.0,
+    "mean_partials": 0.0,
+    "p10_partials": 0.0,
+    "dominance_db": 120.0,
+    "top_partials": [],
+    "feedback_onset_s": null,
+    "sustained_fraction": 0.0
+  },
+  "audio_path": "logs/2026-09-13/feedback_ramp_v3_12oclock_silence_outputs.wav",
+  "notes": "Clean re-measurement after removing the M4 (ground loop, see ground-rules-and-facts.md 4.4) and fixing the mono-input/stereo-output channel-routing bug (see bela/feedback-ramp/render.cpp 2026-09-13 header note). Zero sustained growth for the full 150s run, even holding loop_gain=1.0 for a full 60s. Corroborated, not contradicted, by Abel directly hearing/feeling only increased sustain (no runaway) on bela/gen1-passthrough at this same DTA120 setting moments earlier -- consistent with a sub-unity loop. analyse_take's feedback_onset_s/sustained_fraction use a lenient -60dBFS 'any signal at all' threshold; both read as no signal here."
+}

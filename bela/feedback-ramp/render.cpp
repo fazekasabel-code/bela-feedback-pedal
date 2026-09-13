@@ -26,6 +26,15 @@
  * SAFETY: kOutputCeiling and kWatchdogTimeoutS are safety constants, unchanged in
  * meaning from gen1-passthrough/harness-passthrough. kRampDurationS is a
  * measurement parameter, not a safety constant -- it can be changed freely.
+ *
+ * 2026-09-13: guitar is mono, always on input channel kGuitarInputChannel (see
+ * rig-profile.json host.guitar_input_index) -- both output channels now read
+ * from that one input channel instead of each reading its own. Harmless under
+ * the old M4-based chain (M4 duplicated the mono signal onto both input
+ * channels itself before this ever saw it), but wrong now that the M4 is gone
+ * and input ch1 is genuinely silent: output ch1 -- which feeds the exciter on
+ * this rig, see rig-profile.json host.exciter_output_index -- would have
+ * gotten nothing, same bug just fixed in gen1-passthrough/render.cpp.
  */
 
 #include <array>
@@ -50,6 +59,11 @@ static const float kFadeInS = 0.2f;            // device protection, see harness
 // Measurement parameter, not a safety constant. 60 s leaves a comfortable margin
 // under the 120 s watchdog even after reaching full gain and holding there a while.
 static const float kRampDurationS = 60.0f;
+
+// The guitar is mono and always on this input channel (rig-profile.json
+// host.guitar_input_index, confirmed 2026-09-13). Both output channels read
+// from here -- see header comment.
+static const unsigned int kGuitarInputChannel = 0;
 
 static const std::string kInputsFilename = "inputs.wav";
 static const std::string kOutputsFilename = "outputs.wav";
@@ -150,8 +164,8 @@ void render(BelaContext *context, void *userData)
 			float out = 0.0f;
 
 			if(!gMuted) {
-				const unsigned int inCh = (ch < context->audioInChannels) ? ch : 0;
-				const float in = audioRead(context, n, inCh);
+				// Mono guitar, always this one input channel -- see header comment.
+				const float in = audioRead(context, n, kGuitarInputChannel);
 
 				if(!std::isfinite(in)) {
 					gMuted = true;
