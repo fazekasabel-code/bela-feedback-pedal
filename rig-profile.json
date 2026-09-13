@@ -39,9 +39,9 @@
       "second_pass_ch1_rms_dbfs": -31.6,
       "_second_pass_note": "Clean, matched L/R, no clipping. Confirms input signal path end to end. Measured with bela/io-check-input/ (output-silent diagnostic, never writes audioWrite -- cannot drive the exciter). Not the deliberate Phase 1 gain-staging measurement (gain_staging.pickup_into_board_peak_dbfs below is still null)."
     },
-    "round_trip_latency_ms": null,
-    "round_trip_latency_samples": null,
-    "_latency_note": "Gem spec claims sub-millisecond. Measure electrically by patching an output back to an input. Sets the spacing of the phase-condition comb.",
+    "round_trip_latency_ms": 2.20,
+    "round_trip_latency_samples": 97,
+    "_latency_note": "MEASURED 2026-09-13 via bela/latency-check/ + host/rig/analyse_latency.py -- Abel's suggestion: a short, quiet (0.08 linear) 1kHz burst emitted on the exciter output channel, arrival found on the pickup channel by normalised cross-correlation. This is the WHOLE round trip -- Bela DAC -> DTA120 (at 100%) -> exciter -> body -> strings -> pickup -> Bela ADC, mechanical/acoustic leg included, not just Bela's own electrical latency. 5 bursts: two tight clusters, 2.15-2.20 ms (3 bursts) and 4.17 ms exactly (2 bursts), median 2.20 ms, spread 2.02 ms. The two clusters are suspiciously exact (184 vs ~96-97 samples both times) -- plausibly a real secondary path/mode rather than noise, not investigated further. First search used a 0.3s window and got 2 wild outliers (58ms, 99ms) from the guitar body's resonant ringing after the burst matching the correlation template almost as well as the real arrival -- narrowed to 0.05s and all 5 became consistent. Sets the phase-condition comb spacing (ground-rules 7/11): at ~2.2ms round trip, comb teeth are roughly 1/0.0022 ≈ 450 Hz apart, i.e. fairly sparse in the guitar's range.",
     "analog_in_channels": null,
     "analog_in_voltage_range": null,
     "_spec_analog_in_note": "8 analog inputs, 16-bit, ~22-24 kHz, DC-coupled. Voltage range TBC. Used for the expression pedal (ground-rules 4.3, 8).",

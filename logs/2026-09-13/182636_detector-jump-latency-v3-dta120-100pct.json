@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "run_name": "detector-jump-latency-v3-dta120-100pct",
+  "provenance": {
+    "git_commit": "2f597d1",
+    "git_dirty": true,
+    "rig_profile_sha256": "de08abb038dacdd2982b62cf496c72f3a4cdf595665529a3cdc8b9ee5ec082e6",
+    "rig_profile_version": 3,
+    "recorded_at": "2026-09-13T18:26:36.534464+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit"
+  },
+  "params": {
+    "dta120_gain": "100% (max)",
+    "board_input_gain_db": 10,
+    "baseline_gain": 0.2,
+    "trial_1_jump_gain": 5.0,
+    "trial_2_jump_gain": 1.3,
+    "poll_hz": 50
+  },
+  "metrics": {
+    "trial_2_clean_single_partial_metrics": {
+      "path": "/Users/abel/Library/Mobile Documents/com~apple~CloudDocs/works coding/bela-feedback-pedal/logs/2026-09-13/jump_test_1.3gain_outputs.wav",
+      "duration_s": 89.90766439909297,
+      "sample_rate": 44100,
+      "dominant_hz": 579.1734347575137,
+      "dominant_stability_cents": 0.1059534902615269,
+      "mean_partials": 1.170993733213966,
+      "p10_partials": 1.0,
+      "dominance_db": 103.79064061041929,
+      "top_partials": [
+        {
+          "freq_hz": 579.1882352907345,
+          "level_db": 0.0
+        },
+        {
+          "freq_hz": 49.980319380573626,
+          "level_db": -24.659996544001018
+        },
+        {
+          "freq_hz": 49.425821265349306,
+          "level_db": -24.192752366641397
+        },
+        {
+          "freq_hz": 50.66233507805171,
+          "level_db": -23.525952015452418
+        },
+        {
+          "freq_hz": 48.88174631767637,
+          "level_db": -23.09774929300543
+        }
+      ],
+      "feedback_onset_s": 52.744126984126986,
+      "sustained_fraction": 0.144371203308776
+    },
+    "trial_1_arm_events_within_3s": 0,
+    "trial_2_arm_events_within_20s": 0
+  },
+  "audio_path": "logs/2026-09-13/jump_test_1.3gain_outputs.wav",
+  "notes": "Abel's suggestion for Phase 3's missing real-jump test: rather than wait for a natural fast jump during play, step detector-passthrough's host-controlled overall gain sharply above unity to manufacture one. Two trials, both real growth confirmed on hardware, NEITHER armed the existing growth-rate detector. Trial 1 (gain 0.2->5.0): out_peak climbed -86dBFS->-13..-18dBFS within 3s -- fast and real, but analyse_take showed mean_partials=6.23, dominance=6.8dB: a broadband many-partials-at-once explosion, not a single partial jumping. The prominence-gated detector correctly does not fire on that -- it is not the scenario it is built for. Trial 2 (gain 0.2->1.3): out_peak climbed -84dBFS->~-34dBFS over 20s, plateauing -- analyse_take confirmed a genuinely clean single-partial event this time (dominance=103.8dB, stability=0.1 cents, mean_partials=1.17, 579.2Hz). This IS the target scenario and it still did not arm. Diagnosis: kArmGrowthDbPerFrame=0.8 (~138dB/s sustained 11.6ms, bela/detector-passthrough/render.cpp) was set from ground-rules-7's theoretical ~100-1000dB/s estimate for loop_gain~1.4; this rig's actual measured growth on a clean, unambiguous, real single-partial jump averaged only ~2.5dB/s. Per CLAUDE.md rule 16's spirit, the threshold is the more likely thing to revisit, not this test. Left open, not retuned here -- flagged for whenever Phase 3 detection work resumes; Phase 4 (the one-cell regulator) is next per Abel."
+}

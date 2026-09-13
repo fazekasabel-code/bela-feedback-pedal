@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "run_name": "latency-check-v3-round-trip",
+  "provenance": {
+    "git_commit": "2f597d1",
+    "git_dirty": true,
+    "rig_profile_sha256": "de08abb038dacdd2982b62cf496c72f3a4cdf595665529a3cdc8b9ee5ec082e6",
+    "rig_profile_version": 3,
+    "recorded_at": "2026-09-13T18:18:17.067363+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit"
+  },
+  "params": {
+    "dta120_gain": "100% (max)",
+    "board_input_gain_db": 10,
+    "burst_hz": 1000.0,
+    "burst_amp_linear": 0.08,
+    "burst_duration_ms": 2.0,
+    "num_bursts": 5,
+    "burst_spacing_s": 1.0,
+    "exciter_output_channel": 1,
+    "pickup_input_channel": 0
+  },
+  "metrics": {
+    "round_trip_latency_ms_median": 2.2,
+    "round_trip_latency_ms_spread": 2.02,
+    "per_burst_delay_ms": [
+      2.18,
+      2.15,
+      2.2,
+      4.17,
+      4.17
+    ],
+    "per_burst_ncc_score": [
+      0.86,
+      0.85,
+      0.84,
+      0.85,
+      0.86
+    ]
+  },
+  "audio_path": "logs/2026-09-13/latency_check_inputs.wav",
+  "notes": "Whole-loop round-trip latency via a quiet burst through the exciter, arrival found on the pickup by cross-correlation -- see rig-profile.json host.round_trip_latency_ms for the full writeup."
+}

@@ -35,6 +35,25 @@
  * may raise/extend them. See CLAUDE.md rules 1 and 3. Everything under
  * "detector constants" below is a DSP tuning parameter, not a safety
  * constant -- it can be retuned freely, it just isn't safety-critical.
+ *
+ * 2026-09-13, two changes for the missing Phase 3 exit criterion (a real jump
+ * on a real rig to measure detection latency against):
+ *
+ *   - Same mono-input/stereo-output channel fix as gen1-passthrough and
+ *     feedback-ramp (both host.guitar_input_index-taking-into-account) -- the
+ *     analysis mix was also averaging in the guitar's genuinely-silent second
+ *     channel, quietly halving the signal the detector actually saw.
+ *   - Added a host-controlled `gain` (Watcher, default kBaselineGain, well
+ *     under this rig's measured feedback threshold -- see rig-profile.json
+ *     loop.unity_gain_master_setting_note). Abel's suggestion: rather than
+ *     wait for a natural fast unity-crossing jump during ordinary playing
+ *     (phase-plan.md already flagged this as hard to produce on demand),
+ *     deliberately step this gain up well past unity at a host-chosen,
+ *     precisely-timestamped moment -- an upward jump in overall loop gain
+ *     manufactures the same kind of event Phase 3's detector needs to be
+ *     timed against. Clipping on the way there is fine, even expected --
+ *     only detection latency is being measured here, not audio quality. The
+ *     ceiling still clamps hard regardless of how high the gain is pushed.
  */
 
 #include <array>
@@ -55,6 +74,7 @@ Watcher<float>        gWatchLastArmMagDb("last_arm_magnitude_db");
 Watcher<float>        gWatchLastArmGrowth("last_arm_growth_db_per_frame");
 Watcher<unsigned int> gWatchArmEvents("arm_events_total");    // monotonic counter
 Watcher<unsigned int> gWatchReleaseEvents("release_events_total");
+Watcher<float>        gWatchGain("gain");   // host-controlled, see 2026-09-13 header note
 
 // ---------------------------------------------------------------- constants
 
@@ -99,6 +119,16 @@ static const float kProminenceDb = 25.0f;        // NOT the same number as detec
                                                   // all to the synthetic fast-jump
                                                   // detection latency test.
 static const int   kNeighborOffsetBins = 4;      // cheap local-shoulder estimate
+
+// The guitar is mono and always on this input channel (rig-profile.json
+// host.guitar_input_index, confirmed 2026-09-13).
+static const unsigned int kGuitarInputChannel = 0;
+
+// Safe, quiet starting gain for the jump-latency test -- well under this rig's
+// measured feedback threshold at DTA120=100% (loop_gain approx 1.0, see
+// rig-profile.json loop.unity_gain_master_setting_note). Not a safety constant
+// (the ceiling is); just a sane default before the host takes control.
+static const float kBaselineGain = 0.2f;
 
 static const std::string kInputsFilename = "inputs.wav";
 static const std::string kOutputsFilename = "outputs.wav";
@@ -284,7 +314,9 @@ bool setup(BelaContext *context, void *userData)
 	rt_printf("  analysis: window=%d hop=%d (%.1f ms) arm-growth=%.2f dB/frame\n",
 	          kFftWindow, kHop, 1000.0f * kHop / context->audioSampleRate,
 	          kArmGrowthDbPerFrame);
-	rt_printf("  gain cells: unity (Phase 3 -- actuator disabled by design)\n");
+	gWatchGain = kBaselineGain;
+	rt_printf("  gain: %.2f (host-controlled, jump-latency test -- cells still at unity, "
+	          "this is overall loop gain not per-cell regulation)\n", kBaselineGain);
 	rt_printf("  recording: %s (in), %s (out)\n",
 	          kInputsFilename.c_str(), kOutputsFilename.c_str());
 
@@ -314,20 +346,33 @@ void render(BelaContext *context, void *userData)
 		const uint64_t frames = context->audioFramesElapsed + n;
 		Bela_getDefaultWatcherManager()->tick(frames);
 
-		float mono = 0.0f;
 		for(unsigned int ch = 0; ch < context->audioInChannels; ch++) {
-			const float in = audioRead(context, n, ch);
-			gInputBuf[n * context->audioInChannels + ch] = in;
-			mono += in;
-			const float a = std::fabs(in);
-			if(a > inPeak) inPeak = a;
+			gInputBuf[n * context->audioInChannels + ch] = audioRead(context, n, ch);
 		}
-		if(context->audioInChannels > 0) mono /= context->audioInChannels;
+		// Mono guitar, always this one input channel -- not an average across
+		// channels, which used to silently halve the level by including the
+		// guitar's genuinely-silent second channel. See header comment.
+		const float in = audioRead(context, n, kGuitarInputChannel);
+		const float a = std::fabs(in);
+		if(a > inPeak) inPeak = a;
 
 		// Feed the analysis ring buffer and schedule the auxiliary task every
-		// kHop samples -- gain cells stay at unity (Phase 3: actuator disabled),
-		// this is purely observation.
-		gRing[gRingWritePos] = mono;
+		// kHop samples. The gain applied below is overall loop gain for the
+		// jump-latency test (2026-09-13), not per-cell regulation -- the
+		// analysis sees the same signal that goes to the output, post-gain,
+		// since that's what's actually driving the loop.
+		const float gain = gWatchGain.get();
+		float out = 0.0f;
+		if(!gMuted) {
+			if(!std::isfinite(in) || !std::isfinite(gain)) {
+				gMuted = true;
+				rt_printf("non-finite sample — output muted\n");
+			} else {
+				out = clampToCeiling(in * gain) * fadeGain;
+			}
+		}
+
+		gRing[gRingWritePos] = out;
 		gRingWritePos++;
 		if(gRingWritePos >= kRingSize) gRingWritePos = 0;
 		gSamplesSinceHop++;
@@ -337,25 +382,11 @@ void render(BelaContext *context, void *userData)
 		}
 
 		for(unsigned int ch = 0; ch < context->audioOutChannels; ch++) {
-			float out = 0.0f;
-
-			if(!gMuted) {
-				const unsigned int inCh = (ch < context->audioInChannels) ? ch : 0;
-				const float in = audioRead(context, n, inCh);
-
-				if(!std::isfinite(in)) {
-					gMuted = true;
-					rt_printf("non-finite input sample — output muted\n");
-				} else {
-					out = clampToCeiling(in) * fadeGain;
-				}
-			}
-
 			audioWrite(context, n, ch, out);
 			gOutputBuf[n * context->audioOutChannels + ch] = out;
-			const float a = std::fabs(out);
-			if(a > outPeak) outPeak = a;
 		}
+		const float ao = std::fabs(out);
+		if(ao > outPeak) outPeak = ao;
 	}
 
 	gInputWriter.setSamples(gInputBuf);
