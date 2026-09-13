@@ -17,22 +17,26 @@ sequence of work.
 
 ## Status
 
-**On the Bela Gem Stereo, arrived 2026-09-10. Phase 4 passed 2026-09-13, handed over into Phase 5.** Signal
+**On the Bela Gem Stereo, arrived 2026-09-10. Phase 4 passed 2026-09-13; Phase 5 built, awaiting its real-loop session.** Signal
 chain as wired: Epiphone (humbucker) → Bela in **directly, unbuffered** (mono guitar,
 **confirmed on channel 0/left** by direct measurement); Bela out ch1 → power amp (Dayton
 DTA120) → exciter (Dayton), straight through, no pedal in between — see ground-rules §4.5 for
 why this build carries no dedicated hardware kill switch. The M4 buffer/preamp that used to
 sit between guitar and Bela was **removed 2026-09-13** after being confirmed as the source of
 a ground loop (ground-rules §4.4) — a passive DI box is on order to restore buffering without
-reintroducing that. Also measured this session: input gain (10 dB, Bela's own PGA),
+reintroducing that. Also measured that day: input gain (10 dB, Bela's own PGA),
 whole-loop round-trip latency (2.20 ms), and the feedback threshold (bracketed between
 DTA120=12 o'clock and 100%). The one-cell adaptive regulator that passed the "second partial
 blooms" test on the **old Mac/SuperCollider rig** (`sc/gen1_cell.scd`) has now been ported to
 C++ for Bela (`bela/gen1-cell/`) and **passed the same test for real, on this rig**: DTA120=
 100%, Abel present, verdict "a nicely blooming chord, always 3-4 notes present." Some
 distortion audible late in the take, cause undetermined between the DSP ceiling and the
-exciter (which turns out not to be fixed/mounted yet) — noted, not blocking. See
-`docs/phase-plan.md`'s Status block for the full handover into Phase 5.
+exciter (which was not fixed/mounted at the time — since **secured better**, which per
+CLAUDE.md rule 13 bumped `rig-profile.json` to **v4** and tags every measurement/take above as
+belonging to the old, looser-mount v3). `bela/gen1-multicell/` generalises the one-cell
+regulator to a proper N=4 allocator (glide, release, anti-chatter, lockout, steal-least-active)
+— compiled clean, not yet run against the real (v4) rig. See
+`docs/phase-plan.md`'s Status block for the full handover.
 
 | Piece | State |
 |---|---|
@@ -40,11 +44,12 @@ exciter (which turns out not to be fixed/mounted yet) — noted, not blocking. S
 | `docs/ground-rules-and-facts.md` | Current. See §3.1 for the Gem hardware, §4.4 for the M4 ground-loop finding, §4.5 for the fail-safe decision |
 | `sc/gen1_cell.scd` | One adaptive cell, passed the "second partial blooms" test **on the old Mac rig** — ported to Bela C++ below |
 | `bela/gen1-cell/` | Phase 4 port of the one-cell regulator. **Passed its real-loop test 2026-09-13** (DTA120=100%, Abel present) — see `logs/2026-09-13/185836_first-cell-take-dta120-100pct.json` |
+| `bela/gen1-multicell/` | Phase 5: N=4 allocator (glide/release/anti-chatter/lockout/steal-least-active) generalising `gen1-cell`. Compiles clean, **not yet run against the real exciter** |
 | `bela/detector-passthrough/` | Growth-rate detector, running on hardware, but its arm threshold is known miscalibrated for realistic near-unity jumps — flagged, not yet fixed |
 | `bela/latency-check/`, `host/rig/analyse_latency.py` | Whole-loop round-trip latency via a burst through the exciter + cross-correlation |
 | `host/harness/metrics.py` | Implemented, run against real recorded audio already |
 | `host/rig/` | I/O bring-up + loop runner for the Gem |
-| `rig-profile.json` | v3, platform `bela-gem-stereo` — input gain, round-trip latency, and the feedback threshold bracket are measured; transfer function, partial map, and expression pedal calibration still `null` |
+| `rig-profile.json` | v4, platform `bela-gem-stereo` — input gain, round-trip latency, and the feedback threshold bracket are measured **under v3's looser exciter mount, not yet re-verified under v4**; transfer function, partial map, expression pedal calibration, and exact exciter mounting position still `null` |
 | `bela/gen1-passthrough/` | Built and run on hardware, 2026-09-11 — watchdog, ceiling, mute-on-error all confirmed |
 | `bela/io-check-input/` | Output-silent input-level diagnostic. Confirmed the signal chain end to end, 2026-09-11 |
 | `bela/watcher-check/`, `bela/harness-passthrough/`, `bela/detector-passthrough/`, `bela/feedback-ramp/` | Watcher/pybela streaming, the Phase 1 host harness, the growth-rate detector, and the loop-gain ramp tool — all built and run on hardware, see phase-plan.md |

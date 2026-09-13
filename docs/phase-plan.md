@@ -8,7 +8,8 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 
 ---
 
-> **Status, 2026-09-13 — Phase 4 passed, handover into Phase 5.** Rig is v3 in `rig-profile.json`: the M4
+> **Status, 2026-09-13 — Phase 4 passed, Phase 5 built and awaiting its real-loop session.** Rig
+> is **v4** in `rig-profile.json` (bumped from v3 same day, see below). The M4
 > buffer/preamp is **out** (confirmed ground-loop source, see ground-rules §4.4), guitar runs
 > **direct/unbuffered into Bela ch0**, exciter is fed from Bela **ch1** via the DTA120 — both
 > confirmed by direct measurement, not assumption. Measured this session: input gain staged
@@ -41,8 +42,19 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 > distortion audible from ~16s on, cause undetermined between two live candidates: the DSP
 > output ceiling (which the take did hit) or the exciter itself, which turns out to **not be
 > fixed/mounted** — a genuinely new rig fact, not a mid-session change, now in `rig-profile.json`
-> `exciter._mounting_note_2026-09-13`. Abel's call: proceed to Phase 5 regardless, revisit the
-> distortion source and the exciter mount later. Everything above is logged
+> `exciter._mounting_note_2026-09-13`. Abel's call: proceed to Phase 5, revisit the distortion
+> source later. **Same day, before Phase 5 work started: the exciter was secured better**
+> (Abel) — CLAUDE.md rule 13 ("exciter moved") applies, `rig-profile.json` is bumped to **v4**,
+> and every v3 real-loop measurement/take above (round-trip latency, the feedback-threshold
+> bracket, the Phase 4 pass itself) is tagged as measured through the old, looser mount — see
+> `logs/README.md` for the v3/v4 boundary (same day, same directory — go by
+> `provenance.rig_profile_sha256` or the filename, not the date). **Phase 5 is built, not yet
+> run on hardware:** `bela/gen1-multicell/` generalises gen1-cell to N=4 cells with a proper
+> allocator (glide, release-with-ramp-back, anti-chatter, lockout, steal-least-active) and
+> Bela's own CPU-load monitoring wired to Watcher — compiled clean, not yet validated on the
+> (now differently-mounted) real rig. See phase-plan Phase 5 section below for what's
+> deliberately not done yet (growth-rate arming, the formal jump test, the optional adaptive
+> notch). Everything above is logged
 > under `logs/2026-09-13/`; see `docs/ground-rules-and-facts.md` §4.4 for the ground-loop
 > story and phase-plan Phase 1/3 sections below for the full measurement writeups.
 
@@ -168,7 +180,24 @@ from every future take).
 - Optional here, not before: the adaptive-notch fine tracker under FFT supervision (§6.4), evaluated as an A/B against plain interpolated biquads.
 - Watch CPU load as N grows.
 
-**Exit:** 3+ simultaneous partials sustained in the simulator *and* on the rig; jump regulation inside the latency budget; no chatter, no clicks, no runaway.
+**Built, 2026-09-13, not yet run on hardware.** `bela/gen1-multicell/` generalises
+`bela/gen1-cell/` (Phase 4, PASSED) from one cell to N=4, cascaded in series on the audio
+path, each with its own bandpass detector + envelope follower + peaking-EQ actuator. Compiles
+clean on this board's toolchain (compile-only check, never run). Carries forward gen1-cell's
+two deliberate divergences from ground-rules 6.2/6.3 and sc/gen1_cell.scd (bind by
+loudest-stable-peak rank, not growth rate; one envelope-follower stage) for the same reason —
+see that file's header. New in this file: **steal-least-active** (a candidate left over with
+no free cell takes the currently-BOUND cell with the smallest current cut, past its own
+anti-chatter hold — the frequency/gain glide there for free via the existing per-sample slew,
+no special-cased crossfade needed), a **lockout** on a cell's just-vacated bin after release or
+steal (ground-rules 6.2), and **CPU-load monitoring** wired to Watcher via Bela's own
+`Bela_cpuMonitoringInit/Get` (this phase's "watch CPU load as N grows" line, actually measured
+rather than left as a TODO). Not done: growth-rate-based arming (deferred with the same
+reasoning as gen1-cell), the adaptive-notch fine tracker (explicitly optional here), and the
+formal jump-handling test case — steal-least-active is exercised only implicitly so far, not
+yet validated against a manufactured jump the way Phase 3's detector was.
+
+**Exit:** 3+ simultaneous partials sustained in the simulator *and* on the rig; jump regulation inside the latency budget; no chatter, no clicks, no runaway. **Not yet met** — needs a real-loop session with Abel, and the simulator half doesn't exist (Phase 2 still deliberately skipped).
 
 ---
 
