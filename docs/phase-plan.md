@@ -48,13 +48,23 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 > and every v3 real-loop measurement/take above (round-trip latency, the feedback-threshold
 > bracket, the Phase 4 pass itself) is tagged as measured through the old, looser mount — see
 > `logs/README.md` for the v3/v4 boundary (same day, same directory — go by
-> `provenance.rig_profile_sha256` or the filename, not the date). **Phase 5 is built, not yet
-> run on hardware:** `bela/gen1-multicell/` generalises gen1-cell to N=4 cells with a proper
+> `provenance.rig_profile_sha256` or the filename, not the date). **Phase 5 is built and
+> partly validated.** `bela/gen1-multicell/` generalises gen1-cell to N=4 cells with a proper
 > allocator (glide, release-with-ramp-back, anti-chatter, lockout, steal-least-active) and
-> Bela's own CPU-load monitoring wired to Watcher — compiled clean, not yet validated on the
-> (now differently-mounted) real rig. See phase-plan Phase 5 section below for what's
-> deliberately not done yet (growth-rate arming, the formal jump test, the optional adaptive
-> notch). Everything above is logged
+> Bela's own CPU-load monitoring wired to Watcher. Two live-playing takes read closer to
+> single-partial than gen1-cell's pass — investigated three ways (all logged, see phase-plan
+> Phase 5 section below for the full writeup): a new time-windowed re-scoring tool showed the
+> 40s take actually was trending multi-partial, just slowly; a new engaged/disengaged A/B
+> (a sweep-kick seeds the loop with no human needed, a `bypass` flag toggles the cells) showed
+> a clean, striking result — engaged locks onto a stable 4-partial texture for 30+s, disengaged
+> decays back to winner-takes-all; and a new offline sandbox validated the actuator/allocator
+> logic against synthetic tones and surfaced one real, unfixed finding — a bin-exclusion radius
+> that may be too wide for closely-spaced guitar partials, worth revisiting once the (still
+> unmeasured) partial map exists. **Not yet done:** a live-playing take that reproduces the
+> sweep-kick take's stable 4-partial result — the sweep-kick is a clean synthetic seed, not a
+> substitute for hearing it played. See phase-plan Phase 5 section for what's still
+> deliberately not done otherwise (growth-rate arming, the formal jump test, the optional
+> adaptive notch). Everything above is logged
 > under `logs/2026-09-13/`; see `docs/ground-rules-and-facts.md` §4.4 for the ground-loop
 > story and phase-plan Phase 1/3 sections below for the full measurement writeups.
 
@@ -197,7 +207,43 @@ reasoning as gen1-cell), the adaptive-notch fine tracker (explicitly optional he
 formal jump-handling test case — steal-least-active is exercised only implicitly so far, not
 yet validated against a manufactured jump the way Phase 3's detector was.
 
-**Exit:** 3+ simultaneous partials sustained in the simulator *and* on the rig; jump regulation inside the latency budget; no chatter, no clicks, no runaway. **Not yet met** — needs a real-loop session with Abel, and the simulator half doesn't exist (Phase 2 still deliberately skipped).
+**Run on hardware, 2026-09-13 (same day, after the exciter was secured): two live-playing
+takes read much closer to single-partial than gen1-cell's pass** — partial_count 1.2-1.4 vs
+6.36, peak_sample only 0.07-0.15 vs 0.5 (`logs/2026-09-13/{192844,193307}_*multicell-take*`).
+Investigated three ways, all Abel's suggestions, all agent-run:
+
+1. **`host/rig/snapshot_partials.py`** (new — time-windowed re-scoring of a recording instead
+   of one whole-take average). Applied to the 40s take: it WAS trending toward multi-partial,
+   just slowly — dominance drops from 120 dB to 1.1 dB over the last ~15s. The aggregate mean
+   had washed that out completely.
+2. **A clean engaged/disengaged A/B** (new: a 2s/150-500Hz/0.05-linear sweep-kick seeds every
+   run automatically, and a Watcher-settable `bypass` lets the exact same code run with the
+   cells computed-but-not-applied — see `bela/gen1-multicell/render.cpp`'s header). Same
+   sweep, same 40s, only `bypass` differs: **disengaged** builds up transiently then decays
+   back toward one dominant partial (dominance climbing back to 21 dB by the end) — textbook
+   winner-takes-all reasserting itself. **Engaged** locks onto a stable 4-partial texture by
+   ~15s and holds it for the rest of the take, dominance 2.4-4.6 dB throughout
+   (`logs/2026-09-13/200034_ab-disengaged*`, `200241_ab-engaged*`). This is the clearest
+   positive evidence yet that the allocator does what it's supposed to.
+3. **`host/harness/multicell_sandbox.py`** (new — offline, open-loop, synthetic sine tones
+   through a Python reimplementation of the same allocator/actuator logic; NOT Phase 2's loop
+   simulator, no feedback at all, can't test blooming, only tests whether the code's decisions
+   are sane). Validated: single-tone regulation lands within ~0.2 dB of target; four
+   well-separated equal tones all bind and regulate correctly; a quiet tone under target gets
+   0 dB cut (the "does nothing at or below target" invariant holds); a later, louder, distant
+   5th tone correctly triggers exactly one steal. **One real finding, not fixed**: five equally
+   loud tones spaced 120 Hz apart → only four ever bind, the fifth is permanently excluded
+   (never bound, never stolen for) by `kExclusionBinRadius=6` bins (~129 Hz at this
+   window/hop). Whether that's too wide depends on the guitar's actual partial spacing —
+   ground-rules §7.3's transfer-function measurement (still unmeasured) would settle it, so
+   this is flagged for whenever that measurement happens, not guessed at now.
+
+Two live single-note takes underperforming a controlled synthetic sweep is at least
+consistent with (not proven by) that same exclusion-radius question: a plucked note's own
+lower harmonics can sit closer together than 129 Hz, which the sweep-kick test's
+well-separated tones didn't exercise.
+
+**Exit:** 3+ simultaneous partials sustained in the simulator *and* on the rig; jump regulation inside the latency budget; no chatter, no clicks, no runaway. **Partly met**: 4 simultaneous partials sustained on the real rig for 30+s under the sweep-kick A/B above — but that was a synthetic seed signal, not live playing, and the simulator half still doesn't exist (Phase 2 still deliberately skipped). A live-playing take reproducing the sweep-kick take's stability is the next real-loop thing to check.
 
 ---
 

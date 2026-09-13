@@ -34,8 +34,13 @@ distortion audible late in the take, cause undetermined between the DSP ceiling 
 exciter (which was not fixed/mounted at the time — since **secured better**, which per
 CLAUDE.md rule 13 bumped `rig-profile.json` to **v4** and tags every measurement/take above as
 belonging to the old, looser-mount v3). `bela/gen1-multicell/` generalises the one-cell
-regulator to a proper N=4 allocator (glide, release, anti-chatter, lockout, steal-least-active)
-— compiled clean, not yet run against the real (v4) rig. See
+regulator to a proper N=4 allocator (glide, release, anti-chatter, lockout, steal-least-active).
+Two live-playing takes on the v4 rig read closer to single-partial than gen1-cell's pass, but
+a same-code engaged/disengaged A/B (a sweep-kick seeds the loop with no playing needed) showed
+a clean positive result: **engaged locks onto a stable 4-partial texture for 30+s; disengaged
+decays back to winner-takes-all.** An offline sandbox validated the actuator/allocator math
+against synthetic tones and surfaced one open tuning question (a bin-exclusion radius that may
+be too wide for closely-spaced guitar partials). See
 `docs/phase-plan.md`'s Status block for the full handover.
 
 | Piece | State |
@@ -44,7 +49,8 @@ regulator to a proper N=4 allocator (glide, release, anti-chatter, lockout, stea
 | `docs/ground-rules-and-facts.md` | Current. See §3.1 for the Gem hardware, §4.4 for the M4 ground-loop finding, §4.5 for the fail-safe decision |
 | `sc/gen1_cell.scd` | One adaptive cell, passed the "second partial blooms" test **on the old Mac rig** — ported to Bela C++ below |
 | `bela/gen1-cell/` | Phase 4 port of the one-cell regulator. **Passed its real-loop test 2026-09-13** (DTA120=100%, Abel present) — see `logs/2026-09-13/185836_first-cell-take-dta120-100pct.json` |
-| `bela/gen1-multicell/` | Phase 5: N=4 allocator (glide/release/anti-chatter/lockout/steal-least-active) generalising `gen1-cell`. Compiles clean, **not yet run against the real exciter** |
+| `bela/gen1-multicell/` | Phase 5: N=4 allocator generalising `gen1-cell`. **Sweep-kick A/B shows a clean pass** (4-partial texture sustained 30+s, engaged vs. disengaged decaying back to single-partial) — a live-playing take reproducing that is still open |
+| `host/rig/snapshot_partials.py`, `host/harness/multicell_sandbox.py` | Time-windowed re-scoring of a take, and an offline synthetic-tone allocator/actuator check — both built 2026-09-13 to diagnose gen1-multicell |
 | `bela/detector-passthrough/` | Growth-rate detector, running on hardware, but its arm threshold is known miscalibrated for realistic near-unity jumps — flagged, not yet fixed |
 | `bela/latency-check/`, `host/rig/analyse_latency.py` | Whole-loop round-trip latency via a burst through the exciter + cross-correlation |
 | `host/harness/metrics.py` | Implemented, run against real recorded audio already |
