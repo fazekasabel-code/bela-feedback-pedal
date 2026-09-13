@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "run_name": "first-cell-take-dta120-100pct",
+  "provenance": {
+    "git_commit": "0cf747c",
+    "git_dirty": true,
+    "rig_profile_sha256": "de08abb038dacdd2982b62cf496c72f3a4cdf595665529a3cdc8b9ee5ec082e6",
+    "rig_profile_version": 3,
+    "recorded_at": "2026-09-13T18:58:36.742985+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit"
+  },
+  "params": {
+    "phase": "Phase 4 one-cell",
+    "bela_project": "gen1-cell",
+    "timebox_s": 30.0,
+    "output_ceiling": 0.5,
+    "watchdog_timeout_s": 120.0,
+    "fade_in_s": 0.2,
+    "power_amp_setting": "100%",
+    "target_db": -24.0,
+    "q": 10.0,
+    "attack_ms": 3.0,
+    "release_ms": 400.0,
+    "max_cut_db": 30.0,
+    "freq_lag_s": 0.02,
+    "bind_criterion": "loudest-stable-peak (rank), not growth-rate -- see render.cpp header"
+  },
+  "metrics": {
+    "partial_count": 6.355171073094867,
+    "partial_count_p10": 4.0,
+    "dominance_ratio_db": 8.380525272627372,
+    "peak_flatness": 0.14645259742859087,
+    "sustain_fraction": 0.9042010898224644,
+    "alive_at_end": true,
+    "mode_switch_rate_hz": 0.13395460730948677,
+    "peak_sample": 0.5,
+    "duration_s": 33.065215419501136,
+    "frames_analysed": 5689
+  },
+  "audio_path": "logs/2026-09-13/first-cell-take-dta120-100pct_outputs.wav",
+  "notes": "raw input recording: /Users/abel/Library/Mobile Documents/com~apple~CloudDocs/works coding/bela-feedback-pedal/logs/2026-09-13/first-cell-take-dta120-100pct_inputs.wav. Files renamed post-hoc from the generic inputs.wav/outputs.wav gen1_cell_run.py originally wrote them as -- see that script's fix in the same commit, it now names them per-run."
+}
