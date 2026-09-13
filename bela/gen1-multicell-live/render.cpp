@@ -1,8 +1,9 @@
 /*
- * gen1-multicell — Phase 5 of docs/phase-plan.md: the N-cell allocator
+ * gen1-multicell-live — Phase 5 of docs/phase-plan.md: the N-cell allocator
  * (ground-rules-and-facts.md 6.2), generalising bela/gen1-cell/'s single cell
  * (Phase 4, PASSED 2026-09-13 -- see that project's header for the actuator
- * shape and the safety net, both unchanged here) into a pool.
+ * shape and the safety net, both unchanged here) into a pool. See "THIS FILE
+ * IS gen1-multicell-live" below for what's different from bela/gen1-multicell/.
  *
  *     guitar -> Bela ch0 -> [ cell 0 ] -> [ cell 1 ] -> ... -> [ cell N-1 ] -> Bela ch1 -> DTA120 -> exciter
  *                              ^              ^                    ^
@@ -64,24 +65,29 @@
  * constants" and "allocator constants" below is a musical/DSP parameter, not
  * a safety constant.
  *
- * RUN HISTORY: two real-loop takes 2026-09-13 (DTA120=100%, Abel present, both
- * before the sweep-kick/bypass additions below existed) read much closer to
- * single-partial than gen1-cell's pass -- see
- * logs/2026-09-13/{192844,193307}_*multicell-take*.json and phase-plan.md's
- * Status block. `host/rig/snapshot_partials.py`'s time-windowed view of the
- * second (40s) take shows it WAS trending toward multiple partials by the
- * end (dominance dropping from 120 dB to 1.1 dB over the last ~15s) -- not
- * yet distinguished from a slower-than-gen1-cell but otherwise normal build-
- * up, versus a real difference from the exciter mount being secured since
- * (rig-profile v4) or from gen1-multicell's own behaviour.
+ * RUN HISTORY: see bela/gen1-multicell/render.cpp's own header and
+ * phase-plan.md's Status block for the real-loop takes, the sweep-kick A/B,
+ * and the sandbox findings that led to the N=12 bump and the rebind-duck fix
+ * below -- not repeated here, this file didn't exist yet when any of that
+ * happened.
  *
- * SWEEP-KICK AND BYPASS (added same day, for exactly that investigation
- * without needing a human to pluck a string at the right moment -- see the
- * constants' own header comment above "bypass and sweep-kick"): a short,
- * quiet swept tone seeds the loop automatically near the start of every run,
- * and a Watcher-settable `bypass` flag lets the same code run with the cells
- * computed-but-not-applied, for a same-code, same-seed engaged/disengaged
- * comparison.
+ * THIS FILE IS gen1-multicell-live -- a sibling of bela/gen1-multicell/, same
+ * N-cell allocator/actuator, same N=12, same rebind-duck safety fix, same
+ * `bypass` toggle, MINUS the sweep-kick. gen1-multicell's sweep-kick exists
+ * to seed feedback without a human playing, for repeatable A/B testing --
+ * exactly the opposite of what a live-playing session wants, so it's not in
+ * this file at all rather than merely disabled. Built 2026-09-13 alongside
+ * the N=4->12 bump and the rebind-duck fix, so Abel could feel those changes
+ * live, not just read metrics from a recording afterwards.
+ *
+ * THE GUI: Bela's own Watcher/Gui plumbing (`getGui().setup()` below) is
+ * already wired into every project in this repo -- opening this project in
+ * the browser IDE's own GUI view plots every Watcher variable declared here
+ * live, no extra code needed. That's the "simple GUI": per-cell bound/freq/
+ * cut/partial-level (x12), aggregate bind/release/steal counts, in/out peak,
+ * muted, and audio-thread CPU%. If the IDE's default view is too busy with
+ * all of that at once, most Bela GUI views let you toggle which variables
+ * are plotted -- worth trying before trimming any of this in code.
  */
 
 #include <algorithm>
@@ -111,7 +117,6 @@ Watcher<unsigned int> gWatchReleaseEvents("release_events_total");
 Watcher<unsigned int> gWatchStealEvents("steal_events_total");
 Watcher<float>        gWatchCpuPercent("audio_thread_cpu_percent");
 Watcher<unsigned int> gWatchBypass("bypass");        // host-settable, see header note
-Watcher<unsigned int> gWatchSweepActive("sweep_active");
 
 // Per-cell telemetry -- named at runtime in setup() (cell0_bound,
 // cell1_bound, ...). Constructed via reserve()+emplace_back exactly once, so
@@ -133,35 +138,12 @@ static const float kFadeInS = 0.2f;
 
 static const unsigned int kGuitarInputChannel = 0;
 
-// ---- bypass and sweep-kick (2026-09-13, Abel's suggestions for autonomous
-// A/B testing without needing a human to pluck a string at the right
-// moment). Neither is a safety constant.
-//
-// `bypass` (host-settable via Watcher, default 0/engaged): when 1, the N
-// cells still run in full -- STFT, allocator, actuators, all of it -- but
-// their output is not what reaches the exciter; the excitation signal goes
-// straight through instead, exactly mirroring sc/gen1_cell.scd's own
-// Select.ar(bypass, [wet, in]). This is what makes an engaged/disengaged
-// comparison meaningful: same code, same seed signal, only this one
-// selection point differs (CLAUDE.md rule 10 -- one variable at a time).
-//
-// The sweep: a short, quiet, frequency-swept tone added to the excitation
-// signal at the start of a run, so the physical loop gets a "kick" to start
-// feeding back from instead of waiting on a human's timing. Conservative on
-// purpose -- short (2s), quiet (0.05 linear, an order of magnitude under the
-// output ceiling), and swept only across a modest range of common guitar
-// partial frequencies, not the cell's full 55-2000 Hz range. It is mixed
-// into the signal fed to the cells/analysis/output, NOT into the raw
-// inputs.wav recording -- that file keeps meaning "what the pickup actually
-// sent" across every project in this repo (see rig/analyse_take.py's
-// docstring).
-static const float kSweepDurationS = 2.0f;
-static const float kSweepStartHz = 150.0f;
-static const float kSweepEndHz = 500.0f;
-static const float kSweepAmpLinear = 0.05f;
-static const float kSweepRampS = 0.05f;   // raised-cosine fade at each end of the
-                                           // sweep itself, so it doesn't click on
-                                           // its own way in or out.
+// `bypass` (host-settable via Watcher, default 0/engaged; not a safety
+// constant): when 1, the N cells still run in full -- STFT, allocator,
+// actuators, all of it -- but their output is not what reaches the exciter;
+// the raw input goes straight through instead, exactly mirroring
+// sc/gen1_cell.scd's own Select.ar(bypass, [wet, in]). Lets a live session
+// A/B "does this sound different with the cells on" without redeploying.
 
 // ---- analysis (STFT, reused from bela/gen1-cell -- see that project's
 // header for the fuller rationale, unchanged here).
@@ -297,10 +279,6 @@ static float gDuckIncrement = 0.0f;
 
 static BelaCpuData* gCpuData = nullptr;
 
-static double gSweepPhase = 0.0;   // continuous phase accumulator, double for the
-                                    // same reason oscillator phase accumulators
-                                    // usually are: avoids audible drift over
-                                    // kSweepDurationS at audio-rate increments.
 
 // ------------------------------------------------------------------ helpers
 
@@ -518,7 +496,6 @@ bool setup(BelaContext *context, void *userData)
 	gLastSeenRebindEpoch.fill(0u);
 	gRebindEpoch.fill(0u);
 	gDuckIncrement = 1.0f / (kRebindDuckS * gSampleRate);
-	gSweepPhase = 0.0;
 
 	if(gFft.setup(kFftWindow)) {
 		rt_printf("error setting up Fft\n");
@@ -528,7 +505,7 @@ bool setup(BelaContext *context, void *userData)
 		gWindowCoeff[n] = 0.5f * (1.0f - cosf(2.0f * (float)M_PI * n / (kFftWindow - 1)));
 	}
 
-	gAnalysisTask = Bela_createAuxiliaryTask(&analyseFrame, 85, "gen1-multicell-analysis");
+	gAnalysisTask = Bela_createAuxiliaryTask(&analyseFrame, 85, "gen1-multicell-live-analysis");
 	if(!gAnalysisTask) {
 		rt_printf("error creating the analysis auxiliary task\n");
 		return false;
@@ -570,9 +547,7 @@ bool setup(BelaContext *context, void *userData)
 	Bela_getDefaultWatcherManager()->getGui().setup(context->projectName);
 	Bela_getDefaultWatcherManager()->setup(context->audioSampleRate);
 
-	gWatchBypass = 0u;   // default: engaged. Host sets this to 1 for the disengaged
-	                     // side of an A/B, or leaves it at 0 for normal operation.
-	gWatchSweepActive = 0u;
+	gWatchBypass = 0u;   // default: engaged. Host sets this to 1 for a quick live A/B.
 
 	int ret = 0;
 	ret |= gInputWriter.setup(kInputsFilename, kAudioFileBufferSize,
@@ -587,7 +562,7 @@ bool setup(BelaContext *context, void *userData)
 	gInputBuf.resize((size_t)context->audioInChannels * context->audioFrames);
 	gOutputBuf.resize((size_t)context->audioOutChannels * context->audioFrames);
 
-	rt_printf("gen1-multicell (N=%d)\n", kNumCells);
+	rt_printf("gen1-multicell-live (N=%d)\n", kNumCells);
 	rt_printf("  audio  : %u in / %u out @ %.1f Hz, block %u\n",
 	          context->audioInChannels, context->audioOutChannels,
 	          context->audioSampleRate, context->audioFrames);
@@ -601,8 +576,6 @@ bool setup(BelaContext *context, void *userData)
 	          kTargetDb, kCellQ, kAttackMs, kReleaseMs, kMaxCutDb, 1000.0f * kFreqLagS);
 	rt_printf("  recording: %s (in), %s (out)\n",
 	          kInputsFilename.c_str(), kOutputsFilename.c_str());
-	rt_printf("  sweep-kick: %.0f-%.0f Hz over %.1f s at %.3f linear, right after fade-in\n",
-	          kSweepStartHz, kSweepEndHz, kSweepDurationS, kSweepAmpLinear);
 	rt_printf("  bypass: %u (Watcher-settable; 1 = cells computed but not applied to "
 	          "the audio path -- for an engaged/disengaged A/B)\n", gWatchBypass.get());
 
@@ -630,16 +603,11 @@ void render(BelaContext *context, void *userData)
 	std::array<float, kNumCells> lastPartialDb{};
 	std::array<float, kNumCells> lastCutDb{};
 	bool nonFiniteThisBlock = false;
-	bool sweepActiveThisBlock = false;
 	const bool bypass = (gWatchBypass.get() != 0u);
-
-	const float sweepStartS = kFadeInS;
-	const float sweepEndS = kFadeInS + kSweepDurationS;
 
 	for(unsigned int n = 0; n < context->audioFrames; n++) {
 		const uint64_t frames = context->audioFramesElapsed + n;
 		Bela_getDefaultWatcherManager()->tick(frames);
-		const float sampleElapsedS = (float)(gFrameCount + n) / context->audioSampleRate;
 
 		for(unsigned int ch = 0; ch < context->audioInChannels; ch++) {
 			gInputBuf[n * context->audioInChannels + ch] = audioRead(context, n, ch);
@@ -648,29 +616,7 @@ void render(BelaContext *context, void *userData)
 		const float a = std::fabs(in);
 		if(a > inPeak) inPeak = a;
 
-		// Sweep-kick: see the constants' header comment. Added to the excitation
-		// signal used for everything downstream (analysis, cells, output) -- NOT
-		// to gInputBuf, which stays the true raw pickup signal.
-		float sweepSample = 0.0f;
-		if(sampleElapsedS >= sweepStartS && sampleElapsedS < sweepEndS) {
-			const float tSweep = sampleElapsedS - sweepStartS;
-			const float sweepFreq = kSweepStartHz
-			                       + (kSweepEndHz - kSweepStartHz) * (tSweep / kSweepDurationS);
-			gSweepPhase += 2.0 * M_PI * (double)sweepFreq / (double)context->audioSampleRate;
-			if(gSweepPhase > 2.0 * M_PI) gSweepPhase -= 2.0 * M_PI;
-
-			float ramp = 1.0f;
-			if(tSweep < kSweepRampS) {
-				ramp = 0.5f * (1.0f - cosf((float)M_PI * tSweep / kSweepRampS));
-			} else if(tSweep > kSweepDurationS - kSweepRampS) {
-				ramp = 0.5f * (1.0f - cosf((float)M_PI * (kSweepDurationS - tSweep) / kSweepRampS));
-			}
-			sweepSample = kSweepAmpLinear * ramp * sinf((float)gSweepPhase);
-			sweepActiveThisBlock = true;
-		}
-		const float excitation = in + sweepSample;
-
-		gRing[gRingWritePos] = excitation;
+		gRing[gRingWritePos] = in;
 		gRingWritePos++;
 		if(gRingWritePos >= kRingSize) gRingWritePos = 0;
 		gSamplesSinceHop++;
@@ -679,7 +625,7 @@ void render(BelaContext *context, void *userData)
 			Bela_scheduleAuxiliaryTask(gAnalysisTask);
 		}
 
-		float sig = excitation;
+		float sig = in;
 		for(int c = 0; c < kNumCells; c++) {
 			if(gCellState[c] == kBound) {
 				gFreqSlewed[c] += (gCandidateFreqHz[c] - gFreqSlewed[c]) * gFreqLagCoeff;
@@ -699,7 +645,7 @@ void render(BelaContext *context, void *userData)
 			float envLin;
 			if(gCellState[c] == kBound) {
 				gDetectBpf[c].setFc(freqNow);
-				const float partial = (float)gDetectBpf[c].process(excitation);
+				const float partial = (float)gDetectBpf[c].process(in);
 				envLin = gEnvelope[c].process(partial);
 			} else {
 				envLin = gEnvelope[c].process(0.0f);
@@ -724,11 +670,11 @@ void render(BelaContext *context, void *userData)
 		// bypass (Watcher-settable, see header note): cells above still ran in
 		// full -- this only decides which signal reaches the exciter, exactly
 		// mirroring sc/gen1_cell.scd's Select.ar(bypass, [wet, in]).
-		const float selected = bypass ? excitation : sig;
+		const float selected = bypass ? in : sig;
 
 		float out = 0.0f;
 		if(!gMuted) {
-			if(!std::isfinite(in) || !std::isfinite(excitation) || nonFiniteThisBlock) {
+			if(!std::isfinite(in) || nonFiniteThisBlock) {
 				gMuted = true;
 				rt_printf("non-finite sample — output muted\n");
 			} else {
@@ -755,7 +701,6 @@ void render(BelaContext *context, void *userData)
 	gWatchStealEvents = gStealEventsTotal;
 	gWatchCpuPercent = gCpuData ? gCpuData->percentage : 0.0f;   // already 0-100, see
 	                                                              // RTAudio.cpp's Bela_cpuTic
-	gWatchSweepActive = sweepActiveThisBlock ? 1u : 0u;
 
 	// Periodic CPU print -- phase-plan.md Phase 5: "watch CPU load as N grows".
 	// Watcher exposes it for pybela too, but a plain rt_printf means it shows up
