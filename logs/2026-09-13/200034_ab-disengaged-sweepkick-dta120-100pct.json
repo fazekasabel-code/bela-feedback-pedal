@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "run_name": "ab-disengaged-sweepkick-dta120-100pct",
+  "provenance": {
+    "git_commit": "cb29b33",
+    "git_dirty": true,
+    "rig_profile_sha256": "c3a98008f8b49b809469b898afd930e5c34cf9a305f637a2aa5cd8386ff38b7f",
+    "rig_profile_version": 4,
+    "recorded_at": "2026-09-13T20:00:34.821439+02:00",
+    "host_platform": "macOS-15.1.1-arm64-arm-64bit"
+  },
+  "params": {
+    "phase": "Phase 5 multicell",
+    "bela_project": "gen1-multicell",
+    "timebox_s": 40.0,
+    "output_ceiling": 0.5,
+    "watchdog_timeout_s": 120.0,
+    "fade_in_s": 0.2,
+    "power_amp_setting": "100%",
+    "num_cells": 4,
+    "target_db": -24.0,
+    "q": 10.0,
+    "attack_ms": 3.0,
+    "release_ms": 400.0,
+    "max_cut_db": 30.0,
+    "freq_lag_s": 0.02,
+    "glide_bin_radius": 2,
+    "exclusion_bin_radius": 6,
+    "min_bound_hold_frames": 40,
+    "lockout_frames": 20,
+    "bind_criterion": "loudest-stable-peak (rank), not growth-rate -- see render.cpp header",
+    "steal_criterion": "least-active (smallest current cut) bound cell, past its own anti-chatter hold"
+  },
+  "metrics": {
+    "partial_count": 1.9733279176821013,
+    "partial_count_p10": 1.0,
+    "dominance_ratio_db": 41.697339595179216,
+    "peak_flatness": 0.09593441638530932,
+    "sustain_fraction": 0.9958204125657274,
+    "alive_at_end": true,
+    "mode_switch_rate_hz": 0.23323263606823721,
+    "peak_sample": 0.5,
+    "duration_s": 43.0962358276644,
+    "frames_analysed": 7417
+  },
+  "audio_path": "logs/2026-09-13/ab-disengaged-sweepkick-dta120-100pct_outputs.wav",
+  "notes": "raw input recording: /Users/abel/Library/Mobile Documents/com~apple~CloudDocs/works coding/bela-feedback-pedal/logs/2026-09-13/ab-disengaged-sweepkick-dta120-100pct_inputs.wav"
+}
