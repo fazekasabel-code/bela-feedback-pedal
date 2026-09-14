@@ -98,6 +98,7 @@
 #include <libraries/AudioFile/AudioFile.h>
 #include <libraries/Biquad/Biquad.h>
 #include <libraries/EnvelopeDetector/EnvelopeDetector.h>
+#include <libraries/Scope/Scope.h>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -107,6 +108,18 @@
 // live at this N before trusting it (see setup()'s periodic rt_printf and the
 // commit message) rather than assumed safe just because it compiles.
 static const int kNumCells = 12;
+
+// Live browser view for this project, 2026-09-14: Watcher's own GUI integration
+// is blank on this board (see host/rig/multicell_monitor.py's header -- Watcher's
+// `watcher` library only supports Bela's `dev` branch, this board is on `master`).
+// Scope is a DIFFERENT thing: a core Bela feature (same family as the plain `Gui`
+// class a stock Bela example was confirmed working with in the same browser),
+// not part of the Watcher add-on, so it isn't subject to that same branch
+// mismatch. Reachable at http://<board>/scope regardless of which project name
+// is in the URL. Deliberately few channels -- Scope is a live oscilloscope-style
+// trend view, not a 50-variable dashboard; multicell_monitor.py's terminal output
+// is still the place for exact per-cell numbers.
+static const int kScopeNumChannels = 4;   // in level, out level, cells bound, cpu%
 
 Watcher<float>        gWatchInPeak("in_peak");
 Watcher<float>        gWatchOutPeak("out_peak");
@@ -278,6 +291,7 @@ static std::array<unsigned int, kNumCells> gLastSeenRebindEpoch{};
 static float gDuckIncrement = 0.0f;
 
 static BelaCpuData* gCpuData = nullptr;
+static Scope gScope;
 
 
 // ------------------------------------------------------------------ helpers
@@ -544,6 +558,11 @@ bool setup(BelaContext *context, void *userData)
 	Bela_cpuMonitoringInit(kCpuMonitoringAcquisitionBlocks);
 	gCpuData = Bela_cpuMonitoringGet();
 
+	if(gScope.setup(kScopeNumChannels, context->audioSampleRate)) {
+		rt_printf("error setting up Scope\n");
+		return false;
+	}
+
 	Bela_getDefaultWatcherManager()->getGui().setup(context->projectName);
 	Bela_getDefaultWatcherManager()->setup(context->audioSampleRate);
 
@@ -711,6 +730,11 @@ void render(BelaContext *context, void *userData)
 		gWatchCpuPercent = gCpuData ? gCpuData->percentage : 0.0f;   // already 0-100, see
 		                                                              // RTAudio.cpp's Bela_cpuTic
 		gWatchCellsBoundCount = boundCount;
+
+		const float scopeVals[kScopeNumChannels] = {
+			inPeak, outPeak, (float)boundCount, gCpuData ? gCpuData->percentage : 0.0f
+		};
+		gScope.log(scopeVals);
 	}
 
 	gInputWriter.setSamples(gInputBuf);
