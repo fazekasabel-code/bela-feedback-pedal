@@ -572,6 +572,11 @@ bool setup(BelaContext *context, void *userData)
 
 	gWatchBypass = 0u;   // default: engaged. Host sets this to 1 for the disengaged
 	                     // side of an A/B, or leaves it at 0 for normal operation.
+	// localControl(false) is what actually makes this settable remotely --
+	// without it .get() always returns the locally-assigned value above, never
+	// a value a "set" command writes. Found and fixed 2026-09-14 in
+	// gen1-multicell-live; ported back here for the same reason.
+	gWatchBypass.localControl(false);
 	gWatchSweepActive = 0u;
 
 	int ret = 0;

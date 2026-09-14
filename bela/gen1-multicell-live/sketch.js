@@ -1,379 +1,189 @@
-// when running with old version of the core GUI, the type property of
-// Bela.data.buffers[x] is not set in the backend. This flag is set at runtime
-// if we detect the need for it and enables a workaround
-let backwCompatibility = false;
-let backwTypes = Array();
+// gen1-multicell-live's own browser view, 2026-09-14 -- replaces the generic
+// Watcher control table (vendored from github.com/BelaPlatform/watcher's own
+// sketch.js) with a purpose-built one: a 12-cell grid, a summary row, and
+// (added same day) live tuning sliders for the parameters worth exploring
+// while playing, instead of a 53-row table of every watcher variable with
+// Watch/Control/Log checkboxes most of which are irrelevant here.
+//
+// The wire protocol below (sendCommand/requestList/controlCallback, and the
+// {cmd:"set", watchers:[...], values:[...]} shape the sliders send) is the
+// same mechanism the generic sketch.js used -- that part is genuinely how
+// Bela's Gui/Watcher talks to the board, not something to reinvent. What's
+// different is reading each variable's plain `value` field straight off the
+// periodic "list" response instead of building the full per-variable
+// watch/control/log/mask/monitor UI, and drawing a small fixed dashboard
+// instead of an auto-generated table.
+//
+// The five sliders below map 1:1 to Watcher<float> variables in render.cpp
+// that are actually settable -- see that file's "localControl(false)" comment
+// for why a Watcher variable needs that call before a browser "set" does
+// anything at all (found the hard way: earlier host-controlled variables in
+// this repo, e.g. detector-passthrough's `gain`, never called it and so were
+// never actually controllable from here despite being named like they were).
+// render.cpp clamps every one of these in code regardless of the slider's own
+// range -- this UI's min/max are a starting point for exploration, not the
+// safety boundary.
 
-let controlsLeft = 10;
-let controlsTop = 40;
-let vSpace = 30;
-let nameHspace = 80;
-let hSpaces = [-nameHspace, 0, 40, 80, 130, 230, 340, 390, 490, 610, 690];
-let sampleRateDiv;
-let latestTimestampDiv;
+let values = {};       // watcher name -> latest value (from the periodic "list")
+let sampleRate = 0;
+let connected = false;
+
+const kNumCells = 12;
+const kRefreshMs = 300;   // faster than the generic sketch's stock 1234ms
+
+// ---- wire protocol ----------------------------------------------------
 
 function sendCommand(cmd) {
-	Bela.control.send({
-		watcher: Array.isArray(cmd) ? cmd : [ cmd ],
-	});
+	Bela.control.send({ watcher: Array.isArray(cmd) ? cmd : [cmd] });
 }
 
-function requestWatcherList() {
-	sendCommand({cmd: "list"});
+function requestList() {
+	sendCommand({ cmd: "list" });
 }
 
-let watcherGuiUpdatingFromBackend = false;
+function setWatcher(name, value) {
+	sendCommand({ cmd: "set", watchers: [name], values: [value] });
+}
 
-function parseString(parent, value)
-{
-	// be lenient in parsing the string.
-	// remove whitespaces
-	value = value.trim();
-	let out;
-	let isHex = false;
-	if(0 == value.search(/^0[xX]/)) {
-		// if it starts with 0x, remove it (we will parse it as hex anyhow)
-		value = value.replace(/^0[Xx]/, '');
-		// now remove any separators you may have added for legibility
-		value = value.replace(/[^0-9a-fA-F]/g,'');
-		// and make it an actual hex if appropriate
-		value = "0x" + value;
-		out = parseInt(value);
-		isHex = true;
-	} else if(-1 == value.search(/\./)) {
-		// no decimal separator, assume integer
-		out = parseInt(value);
-	} else {
-		out = parseFloat(value);
+function controlCallback(data) {
+	if (!data.watcher || !data.watcher.watchers) return;
+	const firstConnect = !connected;
+	connected = true;
+	sampleRate = data.watcher.sampleRate;
+	for (const w of data.watcher.watchers) {
+		values[w.name] = w.value;
 	}
-	parent.isHex = isHex;
-	return out;
+	if (firstConnect) syncControlsFromBoard();
+	setTimeout(requestList, kRefreshMs);
 }
 
-function formatNumber(parent, value)
-{
-	return (parent.isHex ? "0x" : "") + value.toString(parent.isHex ? 16 : 10);
+// ---- controls -----------------------------------------------------------
+// name -> {el, kind: 'slider'|'checkbox', label, min, max, step, fmt}
+let controls = {};
+
+function addSlider(name, label, min, max, step, x, y, fmt) {
+	const el = createSlider(min, max, min, step);
+	el.position(x, y + 14);
+	el.style('width', '150px');
+	el.input(() => setWatcher(name, el.value()));
+	controls[name] = { el, kind: 'slider', label, x, y, fmt };
 }
 
-document.addEventListener('visibilitychange', function() {
-	updateClientActive(!document.hidden)
-});
+function addCheckbox(name, label, x, y) {
+	const el = createCheckbox('', false);
+	el.position(x, y + 14);
+	el.changed(() => setWatcher(name, el.checked() ? 1 : 0));
+	controls[name] = { el, kind: 'checkbox', label, x, y };
+}
 
-let clientActive = null;
-function updateClientActive(active) {
-	if(active !== clientActive) {
-		clientActive = active;
-		let evt = clientActive ? "active" : "inactive";
-		Bela.control.send({event: evt});
+// Sliders/checkboxes start at an arbitrary default until the board's real
+// current value arrives -- move them into place once, on first connection,
+// rather than fighting the user's own dragging on every list refresh after.
+function syncControlsFromBoard() {
+	for (const name in controls) {
+		const c = controls[name];
+		const v = values[name];
+		if (typeof v !== 'number') continue;
+		if (c.kind === 'slider') c.el.value(v);
+		else c.el.checked(v !== 0);
 	}
-}
-let masks = {};
-
-// `this` is the object that has changed
-function watcherControlSendToBela()
-{
-	if(watcherGuiUpdatingFromBackend)
-		return;
-	let value = this.value();
-	if(this.checked) // checkboxes
-		value = this.checked();
-	if(this.parser)
-		value = this.parser(value);
-	else
-		if(typeof(value) === "string")
-			value = parseString(this.guiKey.parent, value);
-	if(isNaN(value)) {
-		// this is required for the C++ parser to recognize is it as a
-		// number (NaN is not recognized as a number)
-		value = 0;
-	}
-	let obj = {
-		watchers: [this.guiKey.name],
-		// cmd and other members added below as necessary
-	}
-	switch(this.guiKey.property)
-	{
-		case "watched":
-			if(value) {
-				obj.cmd = "watch";
-				this.lastStartedWatching = performance.now();
-			} else
-				obj.cmd = "unwatch";
-			break;
-		case "controlled":
-			if(value)
-				obj.cmd = "control";
-			else
-				obj.cmd = "uncontrol";
-			break;
-		case "logged":
-			if(value) {
-				obj.cmd = "log";
-				obj.timestamps = [ latestTimestamp + 2 * sampleRate ];
-				// can also pass durations to stop at a scheduled time
-				// obj.durations = [ 6 * sampleRate ];
-			}
-			else
-				obj.cmd = "unlog";
-			break;
-		case "valueInput":
-			obj.values = [value];
-			let mask = masks[this.guiKey];
-			if(mask) {
-				obj.cmd = "setMask";
-				obj.masks = [mask];
-			} else
-				obj.cmd = "set";
-			break;
-		case "maskInput":
-			masks[this.guiKey] = value;
-			// do not send
-			return;
-		case "monitorPeriod":
-			obj.cmd = "monitor";
-			obj.periods = [value];
-			break;
-		default:
-			console.log("unhandled property", this.guiKey.property);
-			// do not send
-			return;
-	}
-	console.log("Sending ", obj);
-	sendCommand(obj);
-}
-
-function watcherSenderInit(obj, guiKey, parser)
-{
-	if(!obj)
-		return;
-	obj.guiKey = guiKey;
-	if("button" === obj.elt.localName)
-		obj.mouseReleased(sendToBela);
-	else
-		obj.input(watcherControlSendToBela);
-	obj.parser = parser;
-	//watcherControlSendToBela.call(obj);
-}
-
-let wGuis = {};
-function watcherUpdateLayout() {
-	let i = 0;
-	for(let k in wGuis) {
-		let w = wGuis[k];
-		let n = 0;
-		for(let o in w) {
-			if(w[o])
-				w[o].position(controlsLeft + nameHspace + hSpaces[n], controlsTop + vSpace * i);
-			n++;
-		}
-		i++;
-	}
-}
-function addWatcherToList(watcher) {
-	let hasMask = watcher.type != 'd' && watcher.type != 'f';
-	let w = {
-		nameDisplay: createElement("div", watcher.name),
-		watched: createCheckbox("W", watcher.watched),
-		controlled: createCheckbox("C", watcher.controlled),
-		logged: createCheckbox("L", watcher.logged),
-		valueInput: createInput(""),
-		maskInput: hasMask ? createInput("") : undefined,
-		valueType: createElement("div", watcher.type),
-		valueDisplay: createElement("div", watcher.value),
-		monitorPeriod: createInput("0"),
-		monitorTimestamp: createElement("div", "_"),
-		monitorValue: createElement("div", "_"),
-	};
-	w.valueInput.elt.style = "width: 13ch";
-	if(hasMask)
-		w.maskInput.elt.style = "width: 13ch";
-	w.monitorPeriod.elt.style = "width: 13ch";
-	w.monitorPeriod.elt.value = watcher.monitor;
-	for(let i in w)
-		watcherSenderInit(w[i], {name: watcher.name, property: i, parent: w});
-	wGuis[watcher.name] = w;
-	watcherUpdateLayout();
-}
-
-function removeWatcherFromList(watcher) {
-	wGuis[watcher].watched.remove();
-	wGuis[watcher].controlled.remove();
-	wGuis[watcher].logged.remove();
-	wGuis[watcher].valueInput.remove();
-	wGuis[watcher].maskInput.remove();
-	wGuis[watcher].valueType.remove();
-	wGuis[watcher].valueDisplay.remove();
-	wGuis[watcher].monitorPeriod.remove();
-	wGuis[watcher].monitorTimestamp.remove();
-	wGuis[watcher].monitorValue.remove();
-	delete wGuis[watcher];
-}
-
-function updateWatcherGuis(w, n) {
-	if(backwCompatibility)
-	{
-		backwTypes[n] = w.type;
-	}
-	// avoid sending message to backend while we are updating
-	watcherGuiUpdatingFromBackend = true;
-	let wgui = wGuis[w.name];
-	wgui.watched.checked(w.watched);
-	wgui.controlled.checked(w.controlled);
-	wgui.logged.checked(w.logged);
-	wgui.logged.elt.title = w.logFileName;
-	wgui.valueType.elt.innerText = w.type;
-	wgui.valueDisplay.elt.innerText = formatNumber(wgui, w.value);
-	watcherGuiUpdatingFromBackend = false;
-}
-
-let latestTimestamp = 0;
-let sampleRate = 0;
-function updateWatcherList(data) {
-	setTimeout(requestWatcherList, 1234); // request a new one
-	latestTimestamp = data.timestamp;
-	sampleRate = data.sampleRate;
-	sampleRateDiv.elt.innerText = sampleRate + "Hz";
-	latestTimestampDiv.elt.innerText = latestTimestamp;
-	let newList = data.watchers;
-	for(let n = 0; n < newList.length; ++n) {
-		if(!(newList[n].name in wGuis)) {
-			addWatcherToList(newList[n]);
-		}
-		updateWatcherGuis(newList[n], n);
-	}
-	for(let i in wGuis) {
-		let found = false;
-		for(let n = 0; n < newList.length; ++n) {
-			if(i == newList[n].name) {
-				found = true;
-				break;
-			}
-		}
-		if(!found)
-			removeWatcherFromList(i);
-	}
-}
-
-let controlCallback = (data) => {
-	if(data.watcher && data.watcher.watchers)
-		updateWatcherList(data.watcher);
-	else
-		console.log(data.watcher);
 }
 
 function setup() {
-	//Create a canvas of dimensions given by current browser window
 	createCanvas(windowWidth, windowHeight);
-
-	//text font
 	textFont('Courier New');
-	requestWatcherList();
-	Bela.control.registerCallback("controlCallback", controlCallback, { val: 1, otherval: 2});
-	let top = controlsTop - 40;
-	createElement("div", "control<br>value").position(controlsLeft + nameHspace + hSpaces[4], top);
-	createElement("div", "control<br>mask").position(controlsLeft + nameHspace + hSpaces[5], top);
-	createElement("div", "type").position(controlsLeft + nameHspace + hSpaces[6], top);
-	createElement("div", "list<br>value").position(controlsLeft + nameHspace + hSpaces[7], top);
-	createElement("div", "monitor<br>interval").position(controlsLeft + nameHspace + hSpaces[8], top);
-	createElement("div", "monitor<br>timestamp").position(controlsLeft + nameHspace + hSpaces[9], top);
-	createElement("div", "monitor<br>value").position(controlsLeft + nameHspace + hSpaces[10], top);
-	sampleRateDiv = createElement("div", "").position(controlsLeft, top);
-	latestTimestampDiv = createElement("div", "").position(controlsLeft + 100, top);
-}
+	Bela.control.registerCallback("controlCallback", controlCallback, {});
+	requestList();
 
-let pastBuffer;
-let clientActiveTimeout;
-function draw() {
-	//Read buffer with index 0 coming from render.cpp.
-	let p = this;
-	var buffers = Bela.data.buffers;
-	if(!buffers.length)
-		return;
-
-	p.background(255)
-
-	p.strokeWeight(1);
-	var linVerScale = 1;
-	var linVerOff = 0;
-	let keys = Object.keys(wGuis);
-	for(let k = 0; k < buffers.length; ++k)
-	{
-		if(keys.length < k) // haven't received a list yet
-			continue;
-		let timestampBuf;
-		let type = buffers[k].type;
-		if(!type) {
-			// when running with old version of the core GUI, type has to be set elsewhere
-			backwCompatibility = true;
-			type = backwTypes[k];
-		}
-		let buf;
-		switch(type)
-		{
-			case 'c':
-				// absurb reverse mapping of an absurd fwd mapping
-				let intArr = buffers[k].slice(0, 8).map((e) => {
-					return e.charCodeAt(0);
-				});
-				timestampBuf = new Uint8Array(intArr);
-				buf = buffers[k].slice(8);
-				break;
-			case 'j': // unsigned int
-				timestampBuf = new Uint32Array(buffers[k].slice(0, 2))
-				buf = buffers[k].slice(2);
-				break;
-			case 'i': // int
-				timestampBuf = new Int32Array(buffers[k].slice(0, 2))
-				buf = buffers[k].slice(2);
-				break;
-			case 'f': // float
-				timestampBuf = new Float32Array(buffers[k].slice(0, 2));
-				buf = buffers[k].slice(2);
-				break;
-			case 'd':
-				timestampBuf = new Float64Array(buffers[k].slice(0, 1));
-				buf = buffers[k].slice(1);
-				break;
-			default:
-				console.log("Unknown buffer type ", type);
-				continue;
-		}
-		let timestampUint32 = new Uint32Array(timestampBuf.buffer);
-		let timestamp = timestampUint32[0] * (1 << 32) + timestampUint32[1];
-		if(1 == buf.length) {
-			// "monitoring" message
-			let w = wGuis[keys[k]];
-			w.monitorTimestamp.elt.innerText = timestamp;
-			w.monitorValue.elt.innerText = formatNumber(w, buf[0]);
-			continue;
-		}
-		let obj = wGuis[keys[k]].watched;
-		let bts = buffers[k].ts;
-		let now = performance.now();
-		// early return if the buffer has not been update since last set to watch
-		// or if the last update is too old
-		if(bts < obj.lastStartedWatching || now - 2000 > bts)
-			continue;
-		// fade out as it gets old
-		let alpha = 1 - (now - 1000 - bts) / 1000;
-		alpha *= 255; // effectively clipped to 255 by color()
-		if(alpha < 0)
-			alpha = 0;
-		p.noFill();
-		var rem = k % 3;
-		p.stroke(p.color(255 * (0 == rem), 255 * (1 == rem), 255 * (2 == rem), alpha));
-		p.beginShape();
-		for (let i = 0; i < buf.length; i++) {
-			var y;
-			y = buf[i] * linVerScale + linVerOff;
-			x = i / (buf.length - 1);
-			p.vertex(p.windowWidth * x, p.windowHeight * (1 - y));
-		}
-		p.endShape();
-	}
+	const row1 = 160, row2 = 210, colW = 210;
+	addSlider('target_db',  'target (dB)',   -48, -6,   0.5,  16,            row1);
+	addSlider('max_cut_db', 'max cut (dB)',    3, 40,   0.5,  16 + colW,     row1);
+	addSlider('release_ms', 'release (ms)',   50, 3000, 10,   16 + colW * 2, row1);
+	addSlider('cell_q',     'Q',               2, 30,   0.5,  16,            row2);
+	addSlider('loop_gain',  'loop gain (x)',   0, 1.5,  0.01, 16 + colW,     row2);
+	addCheckbox('bypass',   'bypass',                         16 + colW * 2, row2);
 }
 
 function windowResized() {
-	watcherUpdateLayout();
 	resizeCanvas(windowWidth, windowHeight);
+}
+
+function num(name, digits) {
+	const v = values[name];
+	return (typeof v === 'number' && isFinite(v)) ? v.toFixed(digits) : '--';
+}
+
+function draw() {
+	background(18);
+
+	if (!connected) {
+		fill(180);
+		noStroke();
+		textSize(16);
+		text('connecting...', 16, 30);
+		return;
+	}
+
+	noStroke();
+	fill(235);
+	textSize(20);
+	text('gen1-multicell-live', 16, 30);
+	fill(140);
+	textSize(12);
+	text(sampleRate ? sampleRate + ' Hz' : '', 16, 48);
+
+	// ---- summary row ----------------------------------------------------
+	const boundCount = values['cells_bound_count'];
+	const muted = values['muted'];
+	const summaryY = 78;
+	textSize(14);
+	fill(235);
+	text('bound ' + (typeof boundCount === 'number' ? boundCount.toFixed(0) : '--') + '/' + kNumCells, 16, summaryY);
+	text('in '  + num('in_peak', 3),  150, summaryY);
+	text('out ' + num('out_peak', 3), 280, summaryY);
+	text('cpu ' + num('audio_thread_cpu_percent', 1) + '%', 410, summaryY);
+	fill(muted ? color(230, 90, 90) : color(90, 210, 110));
+	text(muted ? 'MUTED' : 'live', 540, summaryY);
+	fill(150);
+	text('bind/release/steal ' + num('bind_events_total', 0) + '/'
+	     + num('release_events_total', 0) + '/' + num('steal_events_total', 0), 16, summaryY + 20);
+
+	// ---- tuning controls --------------------------------------------------
+	textSize(12);
+	for (const name in controls) {
+		const c = controls[name];
+		fill(190);
+		const suffix = (name === 'loop_gain') ? num(name, 2) : num(name, 1);
+		text(c.label + (c.kind === 'slider' ? '  ' + suffix : ''), c.x, c.y + 10);
+	}
+
+	// ---- per-cell grid ------------------------------------------------------
+	const cols = 4;
+	const gridTop = 270, cellW = 190, cellH = 92, pad = 10;
+	for (let c = 0; c < kNumCells; c++) {
+		const col = c % cols;
+		const row = Math.floor(c / cols);
+		const x = 16 + col * (cellW + pad);
+		const y = gridTop + row * (cellH + pad);
+		const bound = values['cell' + c + '_bound'];
+
+		noStroke();
+		fill(bound ? color(35, 85, 48) : color(32, 32, 36));
+		rect(x, y, cellW, cellH, 6);
+
+		textSize(13);
+		fill(bound ? color(130, 235, 150) : color(110));
+		text('cell ' + c, x + 10, y + 20);
+
+		textSize(12);
+		if (bound) {
+			fill(225);
+			text(num('cell' + c + '_freq_hz', 0) + ' Hz', x + 10, y + 42);
+			text('cut  ' + num('cell' + c + '_cut_db', 1) + ' dB', x + 10, y + 60);
+			text('lvl  ' + num('cell' + c + '_partial_db', 1) + ' dBFS', x + 10, y + 78);
+		} else {
+			fill(85);
+			text('free', x + 10, y + 42);
+		}
+	}
 }

@@ -131,6 +131,14 @@ Watcher<unsigned int> gWatchStealEvents("steal_events_total");
 Watcher<float>        gWatchCpuPercent("audio_thread_cpu_percent");
 Watcher<unsigned int> gWatchBypass("bypass");        // host-settable, see header note
 
+// Live tuning controls, 2026-09-14 -- see the "tuning controls" constants block
+// below for ranges/safety clamps and the reasoning behind picking these five.
+Watcher<float> gWatchTargetDb("target_db");
+Watcher<float> gWatchMaxCutDb("max_cut_db");
+Watcher<float> gWatchReleaseMs("release_ms");
+Watcher<float> gWatchCellQ("cell_q");
+Watcher<float> gWatchLoopGain("loop_gain");
+
 // Per-cell telemetry -- named at runtime in setup() (cell0_bound,
 // cell1_bound, ...). Constructed via reserve()+emplace_back exactly once, so
 // the vector never reallocates after setup(): Watcher registers `this` with
@@ -187,8 +195,16 @@ static const int   kLockoutFrames = 20;          // ground-rules 6.2's "short lo
                                                   // before the same frequency region can
                                                   // be re-allocated", ~116 ms.
 
-// ---- cell / actuator tuning (ground-rules 6.3; same defaults as gen1-cell,
-// carried over untouched -- untuned, see that project's header).
+// ---- cell / actuator tuning (ground-rules 6.3; same defaults as gen1-cell
+// originally carried over untouched). As of 2026-09-14 the four musically-
+// relevant ones (target/maxCut/release/Q) are live-tunable from the browser
+// GUI while a session runs -- these are now their STARTING values, not fixed
+// constants; see gWatchTargetDb etc. above and the per-sample read below.
+// kAttackMs and kFreqLagS stay fixed constants, not exposed as live controls
+// on purpose: attack is a safety margin (ground-rules 6.3 -- "must be faster
+// than the loop's growth rate"), not a taste knob, and freqLag is what keeps
+// coefficient updates click-free (ground-rules 6.3) rather than something
+// that reads as "tone".
 static const float kTargetDb = -24.0f;
 static const float kCellQ = 10.0f;
 static const float kAttackMs = 3.0f;
@@ -197,6 +213,23 @@ static const float kMaxCutDb = 30.0f;
 static const float kFreqLagS = 0.02f;
 static const float kMinCellFreqHz = 55.0f;
 static const float kMaxCellFreqHz = 2000.0f;
+
+// Safety clamps applied in code to every live-tuning control, regardless of
+// what the browser sends -- defense in depth, not just trusting the slider's
+// own min/max. None of these touch kOutputCeiling (the actual rule-1 safety
+// ceiling) or kWatchdogTimeoutS -- those stay fixed constants, full stop, not
+// reachable from the GUI at all.
+static const float kTargetDbMin = -48.0f, kTargetDbMax = -6.0f;
+static const float kMaxCutDbMin = 3.0f,   kMaxCutDbMax = 40.0f;
+static const float kReleaseMsMin = 50.0f, kReleaseMsMax = 3000.0f;
+static const float kCellQMin = 2.0f,      kCellQMax = 30.0f;
+// Loop gain: a software multiplier on the cells' output, standing in for
+// walking back to the DTA120 knob for every experiment. Deliberately capped
+// well below what could matter for loop stability on its own -- the output
+// ceiling clamp still applies unconditionally after this, every sample,
+// regardless of what this is set to.
+static const float kLoopGainDefault = 1.0f;
+static const float kLoopGainMin = 0.0f, kLoopGainMax = 1.5f;
 
 // 2026-09-13, Abel's request: steal (and an ordinary release-then-rebind in the
 // SAME hop frame, which the allocator allows -- a cell can free and be reassigned
@@ -566,7 +599,24 @@ bool setup(BelaContext *context, void *userData)
 	Bela_getDefaultWatcherManager()->getGui().setup(context->projectName);
 	Bela_getDefaultWatcherManager()->setup(context->audioSampleRate);
 
+	// localControl(false) is what actually makes a Watcher variable settable from
+	// the browser: without it, .get() always returns whatever the C++ side last
+	// assigned (`v`), never the remotely-set value (`vr`) a browser "set" command
+	// writes -- see Watcher.h's own get()/wmSet(). Assign the default BEFORE
+	// disabling local control (localControlChanged() copies v into vr at that
+	// point), so the GUI's slider starts showing the real starting value, not 0.
 	gWatchBypass = 0u;   // default: engaged. Host sets this to 1 for a quick live A/B.
+	gWatchBypass.localControl(false);
+	gWatchTargetDb = kTargetDb;
+	gWatchTargetDb.localControl(false);
+	gWatchMaxCutDb = kMaxCutDb;
+	gWatchMaxCutDb.localControl(false);
+	gWatchReleaseMs = kReleaseMs;
+	gWatchReleaseMs.localControl(false);
+	gWatchCellQ = kCellQ;
+	gWatchCellQ.localControl(false);
+	gWatchLoopGain = kLoopGainDefault;
+	gWatchLoopGain.localControl(false);
 
 	int ret = 0;
 	ret |= gInputWriter.setup(kInputsFilename, kAudioFileBufferSize,
@@ -622,6 +672,31 @@ void render(BelaContext *context, void *userData)
 	bool nonFiniteThisBlock = false;
 	const bool bypass = (gWatchBypass.get() != 0u);
 
+	// Live tuning controls -- read once per block (not per sample; a human
+	// turning a slider doesn't need sample-accurate response, and this keeps
+	// setQ()/setReleaseTime() calls, which aren't free, off the audio-rate
+	// hot path). Clamped in code regardless of what the browser sends -- see
+	// the constants' own header comment.
+	const float targetDb = clampf(gWatchTargetDb.get(), kTargetDbMin, kTargetDbMax);
+	const float maxCutDb = clampf(gWatchMaxCutDb.get(), kMaxCutDbMin, kMaxCutDbMax);
+	const float releaseMs = clampf(gWatchReleaseMs.get(), kReleaseMsMin, kReleaseMsMax);
+	const float cellQ = clampf(gWatchCellQ.get(), kCellQMin, kCellQMax);
+	const float loopGain = clampf(gWatchLoopGain.get(), kLoopGainMin, kLoopGainMax);
+
+	static float sLastReleaseMs = kReleaseMs;
+	if(releaseMs != sLastReleaseMs) {
+		for(int c = 0; c < kNumCells; c++) gEnvelope[c].setReleaseTime(releaseMs);
+		sLastReleaseMs = releaseMs;
+	}
+	static float sLastCellQ = kCellQ;
+	if(cellQ != sLastCellQ) {
+		for(int c = 0; c < kNumCells; c++) {
+			gDetectBpf[c].setQ(cellQ);
+			gActuatorEq[c].setQ(cellQ);
+		}
+		sLastCellQ = cellQ;
+	}
+
 	// gCellState doesn't change within one render() call (only the aux task
 	// writes it, between calls) -- safe to compute once and republish every
 	// sample below.
@@ -676,7 +751,7 @@ void render(BelaContext *context, void *userData)
 				envLin = gEnvelope[c].process(0.0f);
 			}
 			const float partialDb = 20.0f * log10f(std::max(envLin, 1e-9f));
-			const float cutDb = clampf(partialDb - kTargetDb, 0.0f, kMaxCutDb);
+			const float cutDb = clampf(partialDb - targetDb, 0.0f, maxCutDb);
 			const float appliedCutDb = cutDb * gCellDuck[c];
 
 			gActuatorEq[c].setFc(freqNow);
@@ -701,14 +776,16 @@ void render(BelaContext *context, void *userData)
 		// bypass (Watcher-settable, see header note): cells above still ran in
 		// full -- this only decides which signal reaches the exciter, exactly
 		// mirroring sc/gen1_cell.scd's Select.ar(bypass, [wet, in]).
-		const float selected = bypass ? in : sig;
+		const float selected = (bypass ? in : sig) * loopGain;
 
 		float out = 0.0f;
 		if(!gMuted) {
-			if(!std::isfinite(in) || nonFiniteThisBlock) {
+			if(!std::isfinite(in) || !std::isfinite(selected) || nonFiniteThisBlock) {
 				gMuted = true;
 				rt_printf("non-finite sample — output muted\n");
 			} else {
+				// clampToCeiling is the actual safety backstop (rule 1) -- unconditional,
+				// regardless of loopGain, bypass, or anything above.
 				out = clampToCeiling(selected) * fadeGain;
 			}
 		}
