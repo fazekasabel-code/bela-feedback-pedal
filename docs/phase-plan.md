@@ -70,29 +70,35 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 > **`bela/gen1-multicell-live/`** — the same N=12/duck-safe allocator with the sweep-kick
 > removed entirely (for live playing). That assumed Bela's own Watcher/Gui plumbing would
 > just plot live in the browser IDE with no extra code — **it didn't: the browser GUI is
-> blank**. Root-caused, not left as a mystery: this board's Bela core is on the **`master`**
-> branch (confirmed: `git rev-parse --abbrev-ref HEAD` on the board), and pybela's own README
-> states plainly that its `watcher` library "currently only works with the Bela `dev` branch."
-> An earlier session already half-noticed this when Watcher was first vendored (that commit's
-> own message: "this board's Bela (master, not the `dev` branch pybela's docs assume)") but
-> treated two compile fixes as sufficient — they weren't, for the browser-facing behaviour.
-> Confirmed independent of that theory too: survives a clean reboot; reproduces on
-> `detector-passthrough` (unchanged since Phase 1); a stock Bela example using core Bela's own
-> `Gui` class (not Watcher's) loads fine in the same browser. **Fixing it for real means
-> switching this board's Bela core to `dev` and re-validating basic audio from scratch — Abel's
-> call, 2026-09-13: not tonight**, stick with the pybela-based workaround instead; revisit
-> deliberately later if the browser GUI matters enough to justify that risk. Debugging this did
-> surface a second, real bug that WAS fixed regardless of branch: pybela's own streaming failed
-> too, for a different, unrelated reason — this repo's Watcher variables are all written once
-> per render() block, but pybela's protocol expects every watched variable written every audio
-> sample (confirmed: `bela/watcher-check/`, the one project already doing that, was the one
-> thing that worked). Fixed at the source in `bela/gen1-multicell/` and
-> `bela/gen1-multicell-live/`; the same fix is flagged as a follow-up for
-> `detector-passthrough`/`gen1-cell`/`feedback-ramp`/`harness-passthrough`, which still have the
-> old pattern. **`host/rig/multicell_monitor.py`** is the practical result: a live terminal
-> view over pybela, standing in for the still-blank browser GUI. **Not yet
-> done:** an actual live-playing session — the tooling is now confirmed working end to end,
-> nobody's played through it yet. See phase-plan Phase 5 section for what's still deliberately
+> blank, and after a genuinely thorough investigation it's still not fully explained.**
+> Fixed one real, confirmed thing along the way: Watcher's upstream repo ships a `sketch.js`
+> (a p5.js frontend) meant to be vendored alongside `Watcher.h`/`Watcher.cpp` — Abel caught
+> that we never copied it in, and without it the page has nothing to render at all. Now
+> vendored. **Still doesn't fix it** — turns out that placeholder page is what Bela's own
+> framework shows whenever the underlying live connection hasn't come up, sketch.js or not,
+> so this was a real, necessary gap but not a sufficient explanation. Three theories chased
+> and ruled out with actual evidence, not just abandoned: Watcher needing Bela's `dev` branch
+> (this board is on `master`, true, but `Scope` — separate, unrelated, core-Bela code —
+> fails identically, so that's not what's actually causing this); Chrome's "Local Network
+> Access" policy (Safari doesn't enforce it and fails the same way); a non-standard HTTP
+> reason phrase in the handshake (the WHATWG spec only gates on the numeric 101 status).
+> What IS confirmed: Python's `websockets` library (via pybela) completes full, sustained,
+> correctly-parsed sessions against this exact board, so the server's own WebSocket
+> implementation isn't fundamentally broken — every browser engine tried (Chromium via Edge
+> and this repo's own browser tool, WebKit via Safari) fails at the same point regardless.
+> No further lead without packet-level comparison tools this environment doesn't have.
+> Chasing this did surface a second, real, unrelated bug that WAS fixed: pybela's own
+> streaming failed too, for a completely different reason — this repo's Watcher variables
+> are all written once per render() block, but pybela's protocol expects every watched
+> variable written every audio sample (confirmed: `bela/watcher-check/`, the one project
+> already doing that, was the one thing that worked). Fixed at the source in
+> `bela/gen1-multicell/` and `bela/gen1-multicell-live/`; the same fix is flagged as a
+> follow-up for `detector-passthrough`/`gen1-cell`/`feedback-ramp`/`harness-passthrough`,
+> which still have the old pattern. **`host/rig/multicell_monitor.py`** is the practical
+> result: a live terminal view over pybela, standing in for the still-blank browser GUI, and
+> the thing actually confirmed working end to end. **Not yet done:** an actual live-playing
+> session — nobody's played through the tooling yet. See phase-plan Phase 5 section for what's
+> still deliberately
 > not done otherwise (growth-rate arming, the formal jump test, the optional adaptive notch).
 > Everything above is logged
 > under `logs/2026-09-13/`; see `docs/ground-rules-and-facts.md` §4.4 for the ground-loop
@@ -291,18 +297,30 @@ well-separated tones didn't exercise.
   frequency has finished moving.
 - **`bela/gen1-multicell-live/`** — same N=12, same duck-safe allocator, sweep-kick removed
   entirely (opposite of what a live session wants) rather than merely disabled. Expected Bela's
-  own Watcher/Gui plumbing to plot live in the browser IDE with no extra work — **it doesn't**:
-  the browser GUI is blank for every project in this repo. Root-caused, not left as a mystery:
-  this board's Bela core is on the `master` branch (`git rev-parse --abbrev-ref HEAD` on the
-  board), and pybela's own README says its `watcher` library "currently only works with the
-  Bela `dev` branch" — confirmed via web search against pybela's and BelaPlatform/watcher's own
-  docs, not assumed. (Independently corroborated: survives a clean board reboot; reproduces on
-  `detector-passthrough`, unchanged since Phase 1; a stock Bela example using core Bela's own
-  `Gui` class, not the vendored Watcher library's, loads fine in the same browser.) The commit
-  that first vendored Watcher already flagged this branch mismatch in passing but treated two
-  compile fixes as sufficient — they weren't, for the browser-facing behaviour specifically.
-  Actually fixing it means switching this board's Bela core to `dev` and re-validating basic
-  audio from scratch before trusting the rig again — Abel's call, 2026-09-13: not tonight, the
+  own Watcher/Gui plumbing to plot live in the browser IDE with no extra work — **it doesn't**,
+  and after a genuinely thorough investigation this is still not fully explained. Abel caught
+  a real, concrete gap: Watcher's upstream repo (github.com/BelaPlatform/watcher) ships a
+  `sketch.js` (a p5.js frontend) meant to be vendored alongside `Watcher.h`/`Watcher.cpp` —
+  never copied into any project here, so the `/gui` page had nothing to render at all. Now
+  vendored (see `bela/gen1-multicell-live/sketch.js`). **Still doesn't fix the blank page** —
+  the placeholder Bela's own framework shows turns out to be what it shows whenever the
+  underlying live connection hasn't come up, sketch.js present or not. Also added Bela's core
+  `Scope` (a completely separate, unrelated live-view mechanism from Watcher's, reachable at
+  `/scope`) as a second attempt — its page renders its full UI even while disconnected, which
+  is what showed this isn't a "Watcher vs core Bela" distinction: Scope fails the identical way.
+  Three theories chased and ruled out with real evidence, not abandoned on a hunch: Watcher
+  needing Bela's `dev` branch (this board is on `master`, confirmed via `git rev-parse
+  --abbrev-ref HEAD`, and pybela's own README does say `dev`-only — true, but doesn't explain
+  Scope failing too, since Scope has nothing to do with Watcher or branches); Chrome's "Local
+  Network Access" policy (a strong fit until Safari, which doesn't enforce it, failed the same
+  way); a non-standard HTTP reason phrase in the handshake (`"101 WebSocket Protocol
+  Handshake"` instead of `"101 Switching Protocols"` — but the WHATWG spec only gates on the
+  numeric 101 status, not the phrase text). What's actually confirmed: Python's `websockets`
+  library (via pybela) completes full, sustained, correctly-parsed sessions against this exact
+  board, so the server's own WebSocket implementation isn't fundamentally broken — every
+  browser engine tried (Chromium via Edge and this repo's own browser tool, WebKit via Safari)
+  fails at the same point regardless. No further lead without packet-level comparison tools
+  this environment doesn't have. Abel's call, 2026-09-13: not chased further tonight, the
   pybela-based workaround is enough for now.
 - **Found and fixed a second bug along the way**: pybela's own streaming (Python-side, the
   mechanism Phase 1 already confirmed working) was *also* failing, for an unrelated reason —

@@ -1,20 +1,36 @@
 """
 Live terminal monitor for bela/gen1-multicell-live/, via pybela -- built 2026-09-13
 as a workaround for Bela's own browser GUI (the WSServer-based live-plot view in the
-IDE), which fails to connect from every real browser tried (Edge, and this repo's own
-headless browser tool): a WebSocket error immediately after the handshake (code 1006).
-Root-caused, not left a mystery: this board's Bela core is on the `master` branch
-(`git rev-parse --abbrev-ref HEAD` on the board), and pybela's own README says its
-`watcher` library "currently only works with the Bela `dev` branch" -- confirmed via
-web search against pybela's and BelaPlatform/watcher's own docs. The commit that first
-vendored Watcher into this repo already flagged that branch mismatch in passing but
-treated two compile fixes as sufficient; they weren't, for this. Corroborated
-independently too: reproduces after a clean reboot and on a completely different,
-previously-working project (bela/detector-passthrough/); a stock Bela example project
-using core Bela's own `Gui` class (not Watcher's) loads fine in the same browser.
-Actually fixing it means switching this board's Bela core to `dev` and re-validating
-basic audio from scratch -- deferred deliberately (Abel's call, 2026-09-13), not
-attempted here.
+IDE), which fails to connect from every real browser tried (Edge, Safari, and this
+repo's own headless browser tool): a WebSocket error immediately after the handshake
+(code 1006). This got a genuinely thorough investigation, not a shrug -- three
+theories chased and ruled out with real evidence:
+
+  - Watcher needing Bela's `dev` branch (this board is on `master`, confirmed via
+    `git rev-parse --abbrev-ref HEAD`, and pybela's own README does say `watcher`
+    is `dev`-only) -- true, but doesn't explain it: Bela's own core `Scope`
+    (bela/gen1-multicell-live/render.cpp), a completely separate mechanism with
+    nothing to do with Watcher or branches, fails the identical way.
+  - Chrome's "Local Network Access" policy blocking a plain-HTTP page's WebSocket
+    to a local address -- a strong fit, until Safari (which doesn't enforce that
+    policy) failed the exact same way.
+  - A non-standard HTTP reason phrase in the handshake ("101 WebSocket Protocol
+    Handshake" instead of "101 Switching Protocols") -- the WHATWG spec only gates
+    on the numeric 101 status, not the phrase text, so this shouldn't matter and
+    doesn't appear to.
+  - Also missing, found, and fixed along the way (real, but not sufficient on its
+    own): Watcher's upstream repo ships a `sketch.js` the browser GUI needs to
+    render anything at all, never vendored into any project here until now (see
+    bela/gen1-multicell-live/sketch.js). Turns out the placeholder it was missing
+    without that file is the SAME placeholder shown whenever the underlying
+    connection hasn't come up -- so this closed a real gap without fixing the
+    actual blank-page symptom.
+
+What IS confirmed: Python's `websockets` library (via pybela) completes full,
+sustained, correctly-parsed sessions against this exact board, so the server's own
+WebSocket implementation isn't fundamentally broken -- every browser engine tried
+fails at the same point regardless. No further lead without packet-level comparison
+tools this environment doesn't have. Not chased further (Abel's call, 2026-09-14).
 
 Getting this far surfaced a second, real, FIXED bug along the way: pybela's own
 streaming (confirmed working in principle since 2026-09-11, host/rig/watcher_check.py)
