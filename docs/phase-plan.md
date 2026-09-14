@@ -68,37 +68,27 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 > frequency slew alone wasn't enough — it let an old, unrelated cut sweep smoothly THROUGH the
 > new target frequency instead of jumping there, still audible as a notch); and
 > **`bela/gen1-multicell-live/`** — the same N=12/duck-safe allocator with the sweep-kick
-> removed entirely (for live playing). That assumed Bela's own Watcher/Gui plumbing would
-> just plot live in the browser IDE with no extra code — **it didn't: the browser GUI is
-> blank, and after a genuinely thorough investigation it's still not fully explained.**
-> Fixed one real, confirmed thing along the way: Watcher's upstream repo ships a `sketch.js`
-> (a p5.js frontend) meant to be vendored alongside `Watcher.h`/`Watcher.cpp` — Abel caught
-> that we never copied it in, and without it the page has nothing to render at all. Now
-> vendored. **Still doesn't fix it** — turns out that placeholder page is what Bela's own
-> framework shows whenever the underlying live connection hasn't come up, sketch.js or not,
-> so this was a real, necessary gap but not a sufficient explanation. Three theories chased
-> and ruled out with actual evidence, not just abandoned: Watcher needing Bela's `dev` branch
-> (this board is on `master`, true, but `Scope` — separate, unrelated, core-Bela code —
-> fails identically, so that's not what's actually causing this); Chrome's "Local Network
-> Access" policy (Safari doesn't enforce it and fails the same way); a non-standard HTTP
-> reason phrase in the handshake (the WHATWG spec only gates on the numeric 101 status).
-> What IS confirmed: Python's `websockets` library (via pybela) completes full, sustained,
-> correctly-parsed sessions against this exact board, so the server's own WebSocket
-> implementation isn't fundamentally broken — every browser engine tried (Chromium via Edge
-> and this repo's own browser tool, WebKit via Safari) fails at the same point regardless.
-> No further lead without packet-level comparison tools this environment doesn't have.
-> Chasing this did surface a second, real, unrelated bug that WAS fixed: pybela's own
-> streaming failed too, for a completely different reason — this repo's Watcher variables
-> are all written once per render() block, but pybela's protocol expects every watched
-> variable written every audio sample (confirmed: `bela/watcher-check/`, the one project
-> already doing that, was the one thing that worked). Fixed at the source in
-> `bela/gen1-multicell/` and `bela/gen1-multicell-live/`; the same fix is flagged as a
-> follow-up for `detector-passthrough`/`gen1-cell`/`feedback-ramp`/`harness-passthrough`,
-> which still have the old pattern. **`host/rig/multicell_monitor.py`** is the practical
-> result: a live terminal view over pybela, standing in for the still-blank browser GUI, and
-> the thing actually confirmed working end to end. **Not yet done:** an actual live-playing
-> session — nobody's played through the tooling yet. See phase-plan Phase 5 section for what's
-> still deliberately
+> removed entirely (for live playing). The browser GUI looked genuinely, reproducibly broken
+> through a long investigation (three theories chased and ruled out with real evidence: `dev`
+> branch, Chrome's Local Network Access policy, a non-standard HTTP reason phrase — see git
+> history if any of that matters later) — **and then it just worked in Abel's actual Edge
+> browser.** Never fully explained; the working theory is that the retry loop needs more
+> patience than this session's own quick automated checks ever gave it, not a real fix. Along
+> the way: Watcher's upstream repo ships a `sketch.js` (p5.js frontend) never vendored here
+> before — now is, and replaced with a **custom view** (12-cell grid, summary row) instead of
+> the generic 53-row variable table. **Also added: five live tuning sliders** (target level,
+> max cut, release time, cell Q, a new software loop-gain multiplier) **plus a bypass
+> checkbox**, all Watcher-controllable from the browser, all clamped in code regardless of
+> what's sent, verified end to end with a raw websocket test (not assumed). Found a second
+> real bug while wiring these up: a Watcher variable needs an explicit `.localControl(false)`
+> call to actually be settable remotely — `bypass` had the same latent gap, fixed here and in
+> `gen1-multicell`. The pybela per-sample-write bug from earlier is unaffected, still fixed,
+> still flagged as a follow-up for `detector-passthrough`/`gen1-cell`/`feedback-ramp`/
+> `harness-passthrough` (now bundled with the `localControl` fix in the same follow-up task).
+> `host/rig/multicell_monitor.py` remains available as a terminal fallback if the browser view
+> ever flakes again. **Not yet done:** an actual live-playing/tuning session — the tooling is
+> now confirmed working twice over (pybela AND the browser), nobody's played through it yet.
+> See phase-plan Phase 5 section for what's
 > not done otherwise (growth-rate arming, the formal jump test, the optional adaptive notch).
 > Everything above is logged
 > under `logs/2026-09-13/`; see `docs/ground-rules-and-facts.md` §4.4 for the ground-loop
@@ -296,32 +286,26 @@ well-separated tones didn't exercise.
   deliberately slower than the 20ms frequency slew so the notch is essentially gone before the
   frequency has finished moving.
 - **`bela/gen1-multicell-live/`** — same N=12, same duck-safe allocator, sweep-kick removed
-  entirely (opposite of what a live session wants) rather than merely disabled. Expected Bela's
-  own Watcher/Gui plumbing to plot live in the browser IDE with no extra work — **it doesn't**,
-  and after a genuinely thorough investigation this is still not fully explained. Abel caught
-  a real, concrete gap: Watcher's upstream repo (github.com/BelaPlatform/watcher) ships a
-  `sketch.js` (a p5.js frontend) meant to be vendored alongside `Watcher.h`/`Watcher.cpp` —
-  never copied into any project here, so the `/gui` page had nothing to render at all. Now
-  vendored (see `bela/gen1-multicell-live/sketch.js`). **Still doesn't fix the blank page** —
-  the placeholder Bela's own framework shows turns out to be what it shows whenever the
-  underlying live connection hasn't come up, sketch.js present or not. Also added Bela's core
-  `Scope` (a completely separate, unrelated live-view mechanism from Watcher's, reachable at
-  `/scope`) as a second attempt — its page renders its full UI even while disconnected, which
-  is what showed this isn't a "Watcher vs core Bela" distinction: Scope fails the identical way.
-  Three theories chased and ruled out with real evidence, not abandoned on a hunch: Watcher
-  needing Bela's `dev` branch (this board is on `master`, confirmed via `git rev-parse
-  --abbrev-ref HEAD`, and pybela's own README does say `dev`-only — true, but doesn't explain
-  Scope failing too, since Scope has nothing to do with Watcher or branches); Chrome's "Local
-  Network Access" policy (a strong fit until Safari, which doesn't enforce it, failed the same
-  way); a non-standard HTTP reason phrase in the handshake (`"101 WebSocket Protocol
-  Handshake"` instead of `"101 Switching Protocols"` — but the WHATWG spec only gates on the
-  numeric 101 status, not the phrase text). What's actually confirmed: Python's `websockets`
-  library (via pybela) completes full, sustained, correctly-parsed sessions against this exact
-  board, so the server's own WebSocket implementation isn't fundamentally broken — every
-  browser engine tried (Chromium via Edge and this repo's own browser tool, WebKit via Safari)
-  fails at the same point regardless. No further lead without packet-level comparison tools
-  this environment doesn't have. Abel's call, 2026-09-13: not chased further tonight, the
-  pybela-based workaround is enough for now.
+  entirely (opposite of what a live session wants) rather than merely disabled. The browser
+  GUI looked genuinely, reproducibly broken through an extensive investigation (three theories
+  chased and ruled out with real evidence — Watcher needing Bela's `dev` branch, Chrome's
+  Local Network Access policy, a non-standard HTTP handshake reason phrase — see git history
+  if it matters later) — **and then it just worked in Abel's actual Edge browser.** Never
+  fully explained; working theory is the connection's own retry loop needed more patience
+  than this session's quick automated checks ever gave it. Along the way: found that
+  Watcher's upstream repo ships a `sketch.js` (p5.js frontend) never vendored into any project
+  here — now is, and replaced with a **custom view**: a 12-cell grid plus a summary row,
+  instead of the generic 53-row variable table. **Added same day: five live tuning sliders**
+  (target level, max cut, release time, cell Q, a new software loop-gain multiplier) **plus a
+  bypass checkbox**, per Abel's request to start tuning the suppression effect without
+  recompiling — all Watcher-controllable from the browser, all clamped in code regardless of
+  what's sent, verified end to end with a raw websocket test (set `target_db`, read back the
+  changed value, not assumed working). Found a second real bug while wiring these up: a
+  Watcher variable needs an explicit `.localControl(false)` call to actually be settable
+  remotely — the existing `bypass` variable had the same latent gap despite being named like
+  it was controllable; fixed here and ported back to `gen1-multicell`. `host/rig/
+  multicell_monitor.py` remains available as a terminal fallback if the browser view flakes
+  again.
 - **Found and fixed a second bug along the way**: pybela's own streaming (Python-side, the
   mechanism Phase 1 already confirmed working) was *also* failing, for an unrelated reason —
   `'NoneType' object has no attribute 'groups'` from inside pybela's own websocket handling.
@@ -331,9 +315,10 @@ well-separated tones didn't exercise.
   call start working. Fixed at the source in `gen1-multicell`/`gen1-multicell-live`'s
   `render()` (redundant per-sample writes of an already-known block-level value, e.g. a peak
   accumulator, are harmless); flagged as a follow-up for the four older projects that still
-  have the once-per-block pattern.
-- **`host/rig/multicell_monitor.py`** (new) — a live terminal view over the now-working pybela
-  path, standing in for the still-broken browser GUI: per-cell bound/freq/cut/level, bind/
+  have the once-per-block pattern, now bundled with the `localControl(false)` fix above into
+  one combined follow-up task.
+- **`host/rig/multicell_monitor.py`** (new) — a live terminal view over pybela, useful as a
+  fallback if the browser view ever flakes again: per-cell bound/freq/cut/level, bind/
   release/steal totals, in/out peak, CPU%, redrawn a few times a second while a project runs.
 
 Both variants compile clean; `gen1-multicell` was run briefly (foreground, to read the real
