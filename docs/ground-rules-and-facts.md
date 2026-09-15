@@ -285,6 +285,7 @@ A single global limiter after the cells stays in the design, but only as a safet
 
 - STFT on an auxiliary (non-audio-thread) task so it can never miss the audio deadline. Bela provides an `Fft` class and NE10 NEON FFT on board.
 - **Long window, short hop.** Window length sets frequency resolution (adjacent string partials must be resolvable); hop sets detection latency. These are independent — do not shorten the window to get speed. Starting point: 2048-sample window, 128–256-sample hop, Hann, with **quadratic peak interpolation** for sub-bin frequency accuracy.
+  - **Updated 2026-09-14: the window is 8192, the hop stays 256.** 2048 was the starting point and it was too short to obey the rule it was written under. At 44.1 kHz a 2048 bin is 21.5 Hz, which meant (a) the prominence test's guard band excluded everything below 172 Hz — the bottom three open strings' fundamentals could never be allocated a cell at all, (b) the keep-out radius between two cells was 129 Hz, so most pairs of guitar partials could not both be regulated, and (c) the prominence shoulders landed on neighbouring harmonics instead of in the valleys between them. 8192 gives 5.4 Hz bins and fixes all three. Detection latency is unchanged because it is set by the hop. The cost is paid back by only analysing the 45–2500 Hz band, which is fewer bins than the old full-spectrum pass: measured on the board, ~40 % audio-thread CPU at N=12 versus ~38 % for the 2048 version.
 - Per-bin features maintained across frames:
   - magnitude
   - **growth rate** (dB per frame, smoothed) — the important one
@@ -319,6 +320,60 @@ One **peaking-EQ biquad with negative gain** per cell — not a fixed notch. Par
 - On release, the gain **ramps back**; it never resets instantly, or a returning mode gets a free run.
 
 Coefficient updates must be interpolated per-block (or per-sample-crossfaded) — jumping biquad coefficients inside a live feedback loop produces clicks that the loop then amplifies.
+
+### 6.3a Master upward unit
+
+Added 2026-09-14 at Abel's request. One global gain, in dB (`master_boost_db`),
+applied to the input **ahead of the cells** — on the signal the STFT and every
+per-cell detector read, not on the cell chain's output.
+
+The cells only ever cut, so by themselves they cannot start a partial that is not
+already sustaining — what they do is stop a winner running away, which per §5 is
+what was pushing every other mode below unity. This control supplies the other
+half: a mode sustains when its round-trip loop gain reaches unity, and a global
+gain multiplies that loop gain for **every** mode at once. Modes sitting below
+unity are lifted towards it, and modes too quiet to be detected at all rise into
+candidate range; the cells then hold whichever of them take off at the target
+rather than letting one saturate the loop again. Turning this up is the direct
+lever on how many partials sustain.
+
+**Its placement is load-bearing, not incidental.** Put it after the cells and
+they regulate a partial to the target, and the master then multiplies what they
+just regulated — which they cannot see or correct. The output leaves the target
+by exactly the master setting and walks into the ceiling. Ahead of them, a bound
+partial is still regulated to the target however high this goes, and the lift
+survives only on partials no cell has taken, which is exactly the population it
+exists to act on. Measured in `loop_sim.py` over the peaked six-mode plant —
+modes sustained, and the fraction of output samples hitting the ceiling:
+
+| master | after the cells | ahead of the cells |
+|---|---|---|
+| +3 dB | 3/6, 0.00 % | 3/6, 0.00 % |
+| +6 dB | 3/6, 1.60 % | 4/6, 0.00 % |
+| +9 dB | 4/6, 24.31 % | 5/6, 0.00 % |
+| +12 dB | 4/6, 50.96 % | 5/6, 0.00 % |
+| +18 dB | 5/6, 82.17 % | 6/6, 0.00 % |
+
+Ahead of the cells is better on both counts at every setting, and stops clipping
+being the price of recruiting another mode.
+
+It is still blunt. Being broadband it changes no partial's rank relative to
+another, so it lifts the noise floor along with everything else, and every dB of
+it is a dB the cells must spend from `max_cut_db` to hold the winners down.
+Expect the useful setting to be bounded by those two things rather than by the
+slider's own range.
+
+**Measured context for how much this has to do, 2026-09-14.** The rig's loop gain
+is sharply peaked across modes and very few modes are anywhere near unity. The
+open-loop ramp with no cells at all sustains 2 partials, an octave pair. The two
+multicell takes of 2026-09-13 peak at 0.068 and 0.153 against a 0.5 ceiling —
+nowhere near any nonlinearity — which also means §5's shared-saturation
+mechanism is barely engaged in the regime being played in, so there is not much
+stolen gain for the cells to hand back. The offline closed-loop simulator
+(`host/harness/loop_sim.py`) shows the same thing: with six modes at
+g = 1.12, 1.04, 0.85, 0.65, 0.45, 0.25, the cut-only law sustains **1** — and the
+g = 1.04 mode, above unity on its own, dies purely from the dominant mode's
+shared compression, which is §5 behaving exactly as described.
 
 ### 6.4 Alternative fine-tracker, worth prototyping
 

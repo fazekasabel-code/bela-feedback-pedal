@@ -14,7 +14,7 @@
 // watch/control/log/mask/monitor UI, and drawing a small fixed dashboard
 // instead of an auto-generated table.
 //
-// The five sliders below map 1:1 to Watcher<float> variables in render.cpp
+// The sliders below map 1:1 to Watcher<float> variables in render.cpp
 // that are actually settable -- see that file's "localControl(false)" comment
 // for why a Watcher variable needs that call before a browser "set" does
 // anything at all (found the hard way: earlier host-controlled variables in
@@ -95,13 +95,25 @@ function setup() {
 	Bela.control.registerCallback("controlCallback", controlCallback, {});
 	requestList();
 
-	const row1 = 160, row2 = 210, colW = 210;
-	addSlider('target_db',  'target (dB)',   -48, -6,   0.5,  16,            row1);
-	addSlider('max_cut_db', 'max cut (dB)',    3, 40,   0.5,  16 + colW,     row1);
-	addSlider('release_ms', 'release (ms)',   50, 3000, 10,   16 + colW * 2, row1);
-	addSlider('cell_q',     'Q',               2, 30,   0.5,  16,            row2);
-	addSlider('loop_gain',  'loop gain (x)',   0, 1.5,  0.01, 16 + colW,     row2);
-	addCheckbox('bypass',   'bypass',                         16 + colW * 2, row2);
+	// Four columns, three rows. Row 1 is the cell law -- where a partial is
+	// driven TO and how hard a cell may pull it down -- plus the master upward
+	// unit, which is the one control here that changes how much energy the loop
+	// carries. Row 2 is what the allocator will even look at. Row 3 is the
+	// release-side anti-chatter pair and the output stage.
+	const row1 = 150, row2 = 200, row3 = 250, colW = 210;
+	addSlider('target_db',       'target (dB)',       -48, -6,   0.5, 16,            row1);
+	addSlider('max_cut_db',      'max cut (dB)',        3, 40,   0.5, 16 + colW,     row1);
+	addSlider('master_boost_db', 'MASTER boost (dB)', -12, 18,   0.5, 16 + colW * 2, row1);
+	addSlider('release_ms',      'release (ms)',       50, 3000, 10,  16,            row2);
+	addSlider('cell_q',          'Q',                   2, 30,   0.5, 16 + colW,     row2);
+	addSlider('prominence_db',   'prominence (dB)',     3, 30,   0.5, 16 + colW * 2, row2);
+	// Row 3: the release-side anti-chatter pair (see render.cpp's
+	// kMinBoundHoldFrames comment -- cells were letting go of their partial at the
+	// earliest frame the code allows, ~280 ms, over and over), then the output.
+	addSlider('min_hold_ms',      'min hold (ms)',      50, 3000, 10,  16,            row3);
+	addSlider('release_margin_db','release margin (dB)', 3, 40,   0.5, 16 + colW,     row3);
+	addSlider('loop_gain',        'loop gain (x)',       0, 1.5,  0.01, 16 + colW * 2, row3);
+	addCheckbox('bypass',         'bypass',                             16 + colW * 3, row3);
 }
 
 function windowResized() {
@@ -152,14 +164,19 @@ function draw() {
 	textSize(12);
 	for (const name in controls) {
 		const c = controls[name];
-		fill(190);
+		// The master upward unit is picked out: it is the only control here that
+		// changes how much energy the loop carries, and so the direct lever on how
+		// many partials sustain. Everything else decides what the cells see and
+		// how steadily they hold it.
+		const hot = (name === 'master_boost_db');
+		fill(hot ? color(235, 200, 110) : color(190));
 		const suffix = (name === 'loop_gain') ? num(name, 2) : num(name, 1);
 		text(c.label + (c.kind === 'slider' ? '  ' + suffix : ''), c.x, c.y + 10);
 	}
 
 	// ---- per-cell grid ------------------------------------------------------
 	const cols = 4;
-	const gridTop = 270, cellW = 190, cellH = 92, pad = 10;
+	const gridTop = 310, cellW = 190, cellH = 92, pad = 10;
 	for (let c = 0; c < kNumCells; c++) {
 		const col = c % cols;
 		const row = Math.floor(c / cols);

@@ -11,16 +11,17 @@
  *
  * Each cell is its own peaking-EQ biquad + bandpass detector + envelope
  * follower, cascaded in series on the audio path -- a small multi-band
- * parametric EQ where each band's centre frequency and depth are driven
- * independently. Detection for every cell reads the RAW input, not the
- * output of earlier cells in the chain: what a cell regulates is decided
+ * parametric EQ where each band's centre frequency and gain are driven
+ * independently. The gain is a CUT only -- ground-rules 6.3's "peaking-EQ
+ * biquad with negative gain". Detection for every cell reads the RAW input,
+ * not the output of earlier cells in the chain: what a cell regulates is decided
  * from what is actually coming in, not from what the cells ahead of it did
  * to the signal, matching sc/gen1_cell.scd's and gen1-cell's Pitch.kr(in) /
  * STFT(in) philosophy directly.
  *
  * ALLOCATOR (ground-rules 6.2), all per-frame in the STFT auxiliary task:
- *   - Each BOUND cell glides with its partial (+-kGlideBinRadius bins,
- *     quadratic-interpolated -- same as gen1-cell) and releases with a
+ *   - Each BOUND cell glides with its partial (+-kGlideCents, quadratic-
+ *     interpolated -- same as gen1-cell) and releases with a
  *     ramp-back (never instant) after kReleaseHoldFrames frames below
  *     kReleaseMarginDb off its own peak, once past its anti-chatter
  *     kMinBoundHoldFrames.
@@ -79,6 +80,36 @@
  * this file at all rather than merely disabled. Built 2026-09-13 alongside
  * the N=4->12 bump and the rebind-duck fix, so Abel could feel those changes
  * live, not just read metrics from a recording afterwards.
+ *
+ * 2026-09-14 CHANGE SET ("only 1-2 partials ever sustain; make it hold 6-8"),
+ * each item argued at its own constant below rather than here:
+ *   1. STFT window 2048 -> 8192, hop unchanged (kFftWindow). At 21.5 Hz/bin the
+ *      detector could not see anything below 172 Hz -- the bottom three open
+ *      strings -- and its keep-out radius forbade two cells within 129 Hz of
+ *      each other, which is most of the guitar. Paid for by analysing only the
+ *      45-2500 Hz band (kAnalysisMinHz), so it costs less per hop, not more.
+ *   2. Glide and keep-out radii became cents-based (kGlideCents), which is what
+ *      ground-rules 6.2 specifies and a fixed bin count could not express.
+ *   3. The release high-water mark now decays (kPeakDecayDbPerSecond). Latched,
+ *      it made every cell release a few frames after each pluck's transient.
+ *   4. Prominence threshold is live and starts at 10 dB, not a fixed 25 dB
+ *      (kProminenceDbStart). 25 dB was calibrated for a runaway detector, whose
+ *      job is to fire rarely; measured over the recorded takes it is met by
+ *      exactly one peak per take, which is most of why one cell ever bound.
+ *   5. Steal is no longer unconditional when the pool is full (kStealMarginDb).
+ *      It was costing a steal every 30-50 ms -- cells ripped off partials for
+ *      challengers that were not even louder.
+ *   6. The release-side anti-chatter constants are live, at their old values
+ *      (kMinBoundHoldFrames) -- NOT retuned, see that comment.
+ *   7. A master upward unit (kMasterBoostDb), Abel's request: one global gain in
+ *      dB, applied AHEAD of the cells, to lift the whole loop so modes too quiet
+ *      to be detected at all come up into range. This is the only thing here that
+ *      can raise how much energy the loop carries; everything above it decides
+ *      what the cells can SEE and how steadily they hold it. Its placement ahead
+ *      of the cells rather than after them is measured, not incidental -- see
+ *      that constant.
+ * The safety net is untouched by all of it: kOutputCeiling, kWatchdogTimeoutS,
+ * the non-finite mute and the fade-in are exactly as they were (rules 1, 3, 4).
  *
  * THE GUI: Bela's own Watcher/Gui plumbing (`getGui().setup()` below) is
  * already wired into every project in this repo -- opening this project in
@@ -139,6 +170,17 @@ Watcher<float> gWatchReleaseMs("release_ms");
 Watcher<float> gWatchCellQ("cell_q");
 Watcher<float> gWatchLoopGain("loop_gain");
 
+// The 2026-09-14 "why do only 1-2 partials ever sustain" controls -- see the
+// MASTER UPWARD UNIT block and kProminenceDbStart below.
+Watcher<float> gWatchMasterBoostDb("master_boost_db");
+Watcher<float> gWatchProminenceDb("prominence_db");
+
+// Release-side anti-chatter, made live 2026-09-14 -- see kMinBoundHoldFrames.
+// Their defaults are exactly the values that were compile-time constants before,
+// so exposing them changes no behaviour on its own.
+Watcher<float> gWatchMinHoldMs("min_hold_ms");
+Watcher<float> gWatchReleaseMarginDb("release_margin_db");
+
 // Per-cell telemetry -- named at runtime in setup() (cell0_bound,
 // cell1_bound, ...). Constructed via reserve()+emplace_back exactly once, so
 // the vector never reallocates after setup(): Watcher registers `this` with
@@ -168,29 +210,153 @@ static const unsigned int kGuitarInputChannel = 0;
 
 // ---- analysis (STFT, reused from bela/gen1-cell -- see that project's
 // header for the fuller rationale, unchanged here).
-static const int   kFftWindow = 2048;
+// 2026-09-14: window 2048 -> 8192, hop UNCHANGED at 256.
+//
+// ground-rules 6.1 states the rule this now actually obeys: "Long window, short
+// hop. Window length sets frequency resolution (adjacent string partials must be
+// resolvable); hop sets detection latency. These are independent -- do not
+// shorten the window to get speed." At 2048 / 44.1 kHz a bin is 21.5 Hz wide,
+// and three things followed from that, each of which on its own caps how many
+// partials this can ever hold:
+//   - isProminentPeak() rejects every bin below kNeighborOffsetBins*2 = 8, i.e.
+//     everything under 172 Hz. The low E (82 Hz), A (110 Hz) and D (147 Hz)
+//     fundamentals could not bind a cell AT ALL.
+//   - kExclusionBinRadius = 6 meant a 129 Hz keep-out zone around every bound
+//     cell, so two partials closer together than that structurally could not
+//     both be allocated -- which is most of the guitar's useful register.
+//   - the prominence shoulders at +-4 and +-8 bins (86 / 172 Hz) landed on
+//     NEIGHBOURING HARMONICS rather than in the valleys between them, so a
+//     genuine partial measured as barely prominent at all.
+// At 8192 a bin is 5.4 Hz: the detection floor drops to 43 Hz, the keep-out zone
+// to a musically sane width, and the shoulders land in the valleys. Detection
+// latency is unchanged -- that is the hop, not the window.
+//
+// This is not more expensive than what it replaces, because of kAnalysis*Hz
+// below: only the ~430 bins covering the cells' own frequency range are turned
+// into dB and peak-tested, instead of all 1025 bins of the old window.
+static const int   kFftWindow = 8192;
 static const int   kHop = 256;
 static const int   kNumBins = kFftWindow / 2 + 1;
-static const int   kRingSize = kFftWindow * 4;
+static const int   kRingSize = kFftWindow * 2;
+
+// Only this band is analysed at all (see the window comment above). Slightly
+// wider than [kMinCellFreqHz, kMaxCellFreqHz] so a partial at the very edge
+// still has its shoulder bins inside the analysed range.
+static const float kAnalysisMinHz = 45.0f;
+static const float kAnalysisMaxHz = 2500.0f;
 static const float kGrowthSmoothing = 0.6f;      // telemetry only, see header note
 static const int   kStableHoldFrames = 2;
-static const float kReleaseMarginDb = 10.0f;
+static const float kReleaseMarginDb = 10.0f;    // starting value; live, see gWatchReleaseMarginDb
 static const int   kReleaseHoldFrames = 8;
 static const float kSilenceDbfs = -80.0f;
-static const float kProminenceDb = 25.0f;        // see detector-passthrough's header --
-                                                  // 25 dB reproduced zero false arms
-                                                  // against real recorded room noise.
+// Prominence: was a fixed 25 dB, now a live control (gWatchProminenceDb) with
+// this as its STARTING value. 25 dB came from bela/detector-passthrough, where
+// the job was "do not false-arm on room noise" -- i.e. a threshold tuned for a
+// RUNAWAY DETECTOR, whose whole purpose is to fire rarely. This project's cells
+// now have the opposite job as well: finding quiet partials that are not
+// sustaining yet, so they can be driven up. For that, 25 dB is backwards -- a
+// partial 25 dB above its own spectral shoulders is already a winner and does
+// not need help. 12 dB is the new starting point; the slider exists because the
+// right value is a property of this rig's noise floor.
+//
+// Measured 2026-09-14 against the five recorded takes in logs/2026-09-12..13, at
+// the OLD 2048 window, reproducing this exact formula. Of the twenty loudest
+// distinct spectral locations in a whole take, the number clearing each bar:
+//
+//     threshold   first-cell  first-multi  second-multi  sweepkick  ramp-v3
+//       25 dB          1           2            1            0         3
+//       15 dB          4           5            3            3         4
+//       10 dB          9          10           12            3        15
+//        6 dB         18          17           18            3        19
+//
+// So 25 dB is not "generously passed by the winner and narrowly missed by the
+// rest" -- it is met by ONE peak, essentially always. That is the whole of the
+// observed one-bound-cell behaviour. 6 dB is too loose: across every local
+// maximum in every frame (the population a live detector actually faces, which
+// is dominated by noise-floor ripple with a median prominence of ~1.3 dB) 6 dB
+// passes ~14 %, against ~3 % at 10 dB. 10 dB it is.
+//
+// Caveat worth keeping in mind when reading that table: it was measured at the
+// 2048 window this file no longer uses. At 8192 the shoulder taps sit at +-21.5
+// and +-43 Hz instead of +-86 and +-172 Hz, i.e. in the valleys between guitar
+// harmonics rather than on top of neighbouring ones, so a genuine partial should
+// measure MORE prominent than the table says, not less. That makes 10 dB a
+// conservative starting point rather than an aggressive one -- but it is a
+// starting point, which is why the slider exists.
+static const float kProminenceDbStart = 10.0f;
 static const int   kNeighborOffsetBins = 4;
-static const int   kGlideBinRadius = 2;          // ground-rules 6.2's "~50 cents" glide
-                                                  // window, in bins -- see gen1-cell's
-                                                  // header on why bins rather than cents.
-static const int   kExclusionBinRadius = 6;      // how close a new candidate may be to
-                                                  // an already-occupied (bound or
-                                                  // lockout) bin before it is treated as
-                                                  // the same partial rather than a
-                                                  // distinct one worth a cell of its own.
-static const int   kMinBoundHoldFrames = 40;     // anti-chatter, ~232 ms at hop 256 --
-                                                  // guards both release and being stolen.
+// Glide and exclusion are now CENTS-based, not a fixed bin count, 2026-09-14.
+// ground-rules 6.2 specifies the glide window in cents ("+-~50 cents"); gen1-cell
+// approximated it as a fixed +-2 bins because at a 21.5 Hz bin that was roughly
+// right in the middle of the range. It is not roughly right anywhere else: +-2
+// bins is +-430 cents at 100 Hz and +-9 cents at 2 kHz. The same applies to the
+// keep-out radius, which decides whether two partials may each hold a cell --
+// the single most direct limit on how many partials can be regulated at once.
+// A fixed bin count could not express either rule; a cents radius can, and it
+// falls out of the bigger window above for free.
+static const float kGlideCents = 50.0f;          // ground-rules 6.2's glide window, as written
+static const float kExclusionCents = 110.0f;     // just over a semitone: two cells never fight
+                                                  // over one partial, but adjacent semitones
+                                                  // can each hold their own.
+static const int   kGlideBinRadiusMin = 2;
+static const int   kExclusionBinRadiusMin = 3;
+// Anti-chatter minimum hold, ~232 ms at hop 256 -- guards both release and being
+// stolen. Now a live control (gWatchMinHoldMs), starting at this value.
+//
+// WHY IT IS A KNOB AND NOT A NEW NUMBER I PICKED, 2026-09-14. Replayed against
+// the recorded takes, cells release at the EARLIEST MOMENT THIS CODE ALLOWS,
+// over and over: mean bound episode 280 ms on detector_check and on both
+// multicell takes, against a floor of kMinBoundHoldFrames + kReleaseHoldFrames =
+// 48 frames = 278.6 ms. Between 50 % and 81 % of all binds are a slot returning
+// to a frequency region it has already held, and that is just as true on takes
+// where no steal ever happens -- so this is release/rebind cycling, a separate
+// mechanism from the steal thrashing kStealMarginDb fixes, and a bigger one.
+// A cell that lets go of its partial every ~280 ms is not regulating it, it is
+// flickering on and off it.
+//
+// I have NOT picked new values, because ground-rules 6.3 calls release timing a
+// musical parameter -- "it sets how long a partial stays 'used up' before it can
+// bloom again, i.e. how the texture breathes" -- and CLAUDE.md rule 15 says a
+// call like that is Abel's, not mine. So both constants that decide it are live
+// instead, defaulted to exactly what they were.
+//
+// MEASURED STARTING POINT for when Abel does judge it by ear (swept offline over
+// the recorded takes, 232/400/700/1200/2000 ms against 6/10/15/20/30 dB):
+//   min_hold_ms = 700. Revisit fraction falls on every take -- detector_check
+//     0.81 -> 0.64, first-cell-take 0.52 -> 0.35 -- at no cost at all to
+//     bound-cell count, which if anything rises slightly. No cost appeared
+//     anywhere up to 2000 ms. The price is real though: it roughly triples how
+//     long a cell may sit on a genuinely dead partial before it is allowed to let
+//     go, which is exactly the "used up" feel that section calls musical.
+//   release_margin_db = 10, i.e. leave it. This one is inert. It saturates above
+//     ~15 dB, never changes bound-cell count on any take, and on detector_check
+//     and both multicell takes the results are bit-for-bit identical at 10, 15,
+//     20 and 30 dB -- the relative test never fires there at all, only the
+//     absolute kReleaseFloorDbfs and the anti-chatter timer do.
+//
+// Caveat on all of that: the takes were recorded before the detector changes
+// above, so a partial that no cell could see then may behave differently now.
+static const int   kMinBoundHoldFrames = 40;
+static const float kMinHoldMsMin = 50.0f, kMinHoldMsMax = 3000.0f;
+static const float kReleaseMarginDbMin = 3.0f, kReleaseMarginDbMax = 40.0f;
+// 2026-09-14: gBoundPeakMagDb used to be a running max that never came down, and
+// release fires kReleaseMarginDb below it. A plucked note's attack transient sits
+// 20-30 dB above the level it sustains at, so the high-water mark latched onto the
+// transient and EVERY cell then released a few frames later, as the note settled
+// into exactly the sustain we want it to hold -- followed by kLockoutFrames during
+// which it could not rebind. That alone kept the bound count near zero through the
+// most useful part of every note. The mark now decays, so "10 dB below its peak"
+// means below its RECENT peak.
+static const float kPeakDecayDbPerSecond = 10.0f;
+// Absolute backstop for release: however the relative test is doing, a partial that
+// has actually gone quiet should free its cell. Sits above kSilenceDbfs so a cell is
+// not held on by pure noise.
+static const float kReleaseFloorDbfs = -72.0f;
+// How much louder a challenger must be than the incumbent it would displace
+// before a steal is allowed at all -- see the steal block in analyseFrame() for
+// the measured thrashing this exists to stop. 0 reproduces the old unconditional
+// behaviour, matching multicell_sandbox.py's STEAL_MARGIN_DB.
+static const float kStealMarginDb = 6.0f;
 static const int   kLockoutFrames = 20;          // ground-rules 6.2's "short lockout
                                                   // before the same frequency region can
                                                   // be re-allocated", ~116 ms.
@@ -214,6 +380,54 @@ static const float kFreqLagS = 0.02f;
 static const float kMinCellFreqHz = 55.0f;
 static const float kMaxCellFreqHz = 2000.0f;
 
+// ------------------------------------------------ MASTER UPWARD UNIT
+// Abel's request, 2026-09-14: one global gain, in dB, on the cell chain's
+// output, ahead of the safety ceiling.
+//
+// The cells themselves only ever CUT -- gainDb = -clamp(partialDb - targetDb, 0,
+// maxCut) -- so on their own they cannot start a partial that is not already
+// sustaining. What they do is stop a winner running away. ground-rules 5's
+// homogeneous saturation is why that matters: the fastest-growing mode reaches
+// the loop's first nonlinearity and pulls the WHOLE loop's gain down with it,
+// pushing everything else below unity. Regulating the winner to a target undoes
+// exactly that, and hands every other mode back its own open-loop loop gain.
+//
+// This control supplies the other half. A mode sustains when its round-trip loop
+// gain -- pickup -> DSP -> DTA120 -> exciter -> body -> string -> pickup --
+// reaches unity, and this multiplies that gain for EVERY mode at once, so modes
+// that sat below unity are lifted towards it and modes too quiet to be detected
+// at all rise into candidate range. The cells then hold whichever ones take off
+// at the target instead of letting one of them saturate the loop again. Turning
+// this up is the direct lever on how many partials sustain.
+//
+// WHERE IT SITS MATTERS, and it goes AHEAD of the cells -- on the signal the
+// detectors and the STFT both read, not on the cell chain's output. Put it after
+// them and the cells regulate a partial to the target and the master then
+// multiplies what they just regulated, which they cannot see or correct: the
+// output leaves the target by exactly the master setting and walks into the
+// ceiling. Ahead of them, a bound partial is still regulated to the target no
+// matter how high this goes, and the lift survives only on partials no cell has
+// taken -- which is precisely the population it is supposed to act on.
+//
+// Measured in host/harness/loop_sim.py over the peaked six-mode plant, sustained
+// modes and the fraction of output samples hitting the ceiling:
+//
+//     master   after the cells      ahead of the cells
+//      +3 dB    3/6    0.00 %         3/6    0.00 %
+//      +6 dB    3/6    1.60 %         4/6    0.00 %
+//      +9 dB    4/6   24.31 %         5/6    0.00 %
+//     +12 dB    4/6   50.96 %         5/6    0.00 %
+//     +18 dB    5/6   82.17 %         6/6    0.00 %
+//
+// Ahead of the cells is better on both counts at every setting, and stops
+// clipping being the price of recruiting another mode.
+//
+// It is still blunt: being broadband it changes no partial's rank, so it lifts
+// the noise floor along with everything else, and every dB of it is a dB the
+// cells must spend from kMaxCutDb to hold the winners down. Expect the useful
+// setting to be bounded by those two things rather than by the slider's range.
+static const float kMasterBoostDb = 0.0f;
+
 // Safety clamps applied in code to every live-tuning control, regardless of
 // what the browser sends -- defense in depth, not just trusting the slider's
 // own min/max. None of these touch kOutputCeiling (the actual rule-1 safety
@@ -223,6 +437,8 @@ static const float kTargetDbMin = -48.0f, kTargetDbMax = -6.0f;
 static const float kMaxCutDbMin = 3.0f,   kMaxCutDbMax = 40.0f;
 static const float kReleaseMsMin = 50.0f, kReleaseMsMax = 3000.0f;
 static const float kCellQMin = 2.0f,      kCellQMax = 30.0f;
+static const float kMasterBoostDbMin = -12.0f, kMasterBoostDbMax = 18.0f;
+static const float kProminenceDbMin = 3.0f, kProminenceDbMax = 30.0f;
 // Loop gain: a software multiplier on the cells' output, standing in for
 // walking back to the DTA120 knob for every experiment. Deliberately capped
 // well below what could matter for loop stability on its own -- the output
@@ -246,6 +462,7 @@ static const float kLoopGainMin = 0.0f, kLoopGainMax = 1.5f;
 // than kFreqLagS so the notch is essentially gone before the frequency is still
 // moving, and slow enough itself not to be its own click.
 static const float kRebindDuckS = 0.05f;
+
 
 static const int kCpuMonitoringAcquisitionBlocks = 1000;
 
@@ -277,6 +494,21 @@ static std::vector<int>   gPersistence(kNumBins, 0);
 static float gSampleRate = 44100.0f;
 static AuxiliaryTask gAnalysisTask;
 
+// The analysed band, in bins (see kAnalysisMinHz/kAnalysisMaxHz). Everything
+// outside it is never converted to dB or peak-tested at all -- that is what pays
+// for the longer window. Set once in setup().
+static int gAnalysisLoBin = 0;
+static int gAnalysisHiBin = kNumBins - 1;
+
+// Scratch for one analysis frame. Static rather than a local std::vector: at
+// kNumBins = 4097 a per-hop local would mean a heap allocation every 5.8 ms.
+// Only the auxiliary task ever touches it, and only one instance of that task
+// runs at a time, so a single shared buffer is safe.
+static std::vector<float> gMagDb(kNumBins, -200.0f);
+
+// kPeakDecayDbPerSecond converted to dB per STFT hop; set in setup().
+static float gPeakDecayDbPerFrame = 0.0f;
+
 // ---- allocator state, one slot per cell. Written only by the auxiliary
 // task (except gCellCutDbLast, written only by the audio thread) -- same
 // single-writer convention bela/detector-passthrough and bela/gen1-cell rely
@@ -296,7 +528,7 @@ static unsigned int gStealEventsTotal = 0;
 
 // Bumped every time a cell's bound_bin is assigned a NEW target -- a fresh
 // bind from FREE, or a steal. NOT bumped by an ordinary glide (same
-// partial, bin moves by at most kGlideBinRadius) -- glide is already
+// partial, bin moves by at most the glide radius) -- glide is already
 // continuous and needs no extra safety. The audio thread watches this to
 // know when to duck a cell's cut down and back in (see kRebindDuckS and
 // gCellDuck below) -- otherwise a steal or a same-frame release-then-rebind
@@ -323,6 +555,7 @@ static std::array<float, kNumCells> gCellDuck{};
 static std::array<unsigned int, kNumCells> gLastSeenRebindEpoch{};
 static float gDuckIncrement = 0.0f;
 
+
 static BelaCpuData* gCpuData = nullptr;
 static Scope gScope;
 
@@ -343,11 +576,25 @@ static inline float clampf(float x, float lo, float hi)
 	return x;
 }
 
-// Identical to bela/gen1-cell's isProminentPeak() -- see that project's
-// header comment for why 25 dB, not the Python reference's 6 dB.
-static bool isProminentPeak(const std::vector<float>& magDb, int i)
+// How many bins away from bin `i` is `cents` cents, at this window size? Bin
+// index is linear in frequency and cents are logarithmic, so this is a function
+// of where in the spectrum you are -- which is exactly why a fixed bin radius
+// could not express ground-rules 6.2's glide window. See kGlideCents.
+static inline int centsToBins(int bin, float cents, int minBins)
 {
-	if(i < kNeighborOffsetBins * 2 || i >= kNumBins - kNeighborOffsetBins * 2)
+	const float factor = powf(2.0f, cents / 1200.0f) - 1.0f;
+	const int r = (int)lrintf((float)bin * factor);
+	return (r < minBins) ? minBins : r;
+}
+
+// Same shape as bela/gen1-cell's isProminentPeak(), but the threshold is now a
+// live parameter rather than a compile-time 25 dB -- see kProminenceDbStart for
+// why that constant was tuned for the opposite problem to the one we have.
+// Bounded to the analysed band (gAnalysisLoBin/HiBin) rather than the whole
+// spectrum; bins outside it never had their dB computed.
+static bool isProminentPeak(const std::vector<float>& magDb, int i, float prominenceDb)
+{
+	if(i < gAnalysisLoBin + kNeighborOffsetBins * 2 || i > gAnalysisHiBin - kNeighborOffsetBins * 2)
 		return false;
 	if(magDb[i] < magDb[i - 1] || magDb[i] < magDb[i + 1])
 		return false;
@@ -355,7 +602,7 @@ static bool isProminentPeak(const std::vector<float>& magDb, int i)
 	const float shoulderLeft  = 0.5f * (magDb[i - kNeighborOffsetBins] + magDb[i - kNeighborOffsetBins * 2]);
 	const float shoulderRight = 0.5f * (magDb[i + kNeighborOffsetBins] + magDb[i + kNeighborOffsetBins * 2]);
 	const float shoulder = std::max(shoulderLeft, shoulderRight);
-	return (magDb[i] - shoulder) >= kProminenceDb;
+	return (magDb[i] - shoulder) >= prominenceDb;
 }
 
 // Identical to bela/gen1-cell's interpolatedBinToHz().
@@ -373,15 +620,16 @@ static float interpolatedBinToHz(const std::vector<float>& magDb, int i)
 	return (i + p) * gSampleRate / (float)kFftWindow;
 }
 
-// Is bin `i` within kExclusionBinRadius of any currently-bound or
+// Is bin `i` within kExclusionCents of any currently-bound or
 // lockout-held bin? Used to keep two cells from binding to the same (or an
 // adjacent, effectively-the-same) partial.
 static bool isBinOccupied(int i)
 {
+	const int radius = centsToBins(i, kExclusionCents, kExclusionBinRadiusMin);
 	for(int c = 0; c < kNumCells; c++) {
-		if(gCellState[c] == kBound && std::abs(i - gBoundBin[c]) <= kExclusionBinRadius)
+		if(gCellState[c] == kBound && std::abs(i - gBoundBin[c]) <= radius)
 			return true;
-		if(gLockoutFrames[c] > 0 && std::abs(i - gLockoutBin[c]) <= kExclusionBinRadius)
+		if(gLockoutFrames[c] > 0 && std::abs(i - gLockoutBin[c]) <= radius)
 			return true;
 	}
 	return false;
@@ -401,15 +649,23 @@ void analyseFrame(void*)
 
 	gFft.fft(gAnalysisFrame);
 
-	std::vector<float> magDb(kNumBins);
-	for(int i = 0; i < kNumBins; i++) {
+	// Only the analysed band, not all kNumBins -- see kAnalysisMinHz. This is
+	// what keeps the 8192-point window cheaper per hop than the 2048 one was:
+	// ~430 log10f calls instead of 1025.
+	std::vector<float>& magDb = gMagDb;
+	const float prominenceDb = clampf(gWatchProminenceDb.get(), kProminenceDbMin, kProminenceDbMax);
+	const float minHoldMs = clampf(gWatchMinHoldMs.get(), kMinHoldMsMin, kMinHoldMsMax);
+	const float releaseMarginDb = clampf(gWatchReleaseMarginDb.get(),
+	                                     kReleaseMarginDbMin, kReleaseMarginDbMax);
+	const int minHoldFrames = (int)(0.001f * minHoldMs * gSampleRate / (float)kHop);
+	for(int i = gAnalysisLoBin; i <= gAnalysisHiBin; i++) {
 		const float mag = gFft.fda(i) / (kFftWindow / 2.0f);
 		magDb[i] = 20.0f * log10f(std::max(mag, 1e-12f));
 	}
-	for(int i = 0; i < kNumBins; i++) {
+	for(int i = gAnalysisLoBin; i <= gAnalysisHiBin; i++) {
 		const float growth = magDb[i] - gPrevMagDb[i];   // telemetry only, see header
 		gSmoothedGrowth[i] = kGrowthSmoothing * growth + (1.0f - kGrowthSmoothing) * gSmoothedGrowth[i];
-		gPersistence[i] = isProminentPeak(magDb, i) ? gPersistence[i] + 1 : 0;
+		gPersistence[i] = isProminentPeak(magDb, i, prominenceDb) ? gPersistence[i] + 1 : 0;
 		gPrevMagDb[i] = magDb[i];
 	}
 
@@ -425,8 +681,11 @@ void analyseFrame(void*)
 
 		int newBin = gBoundBin[c];
 		float newBinMagDb = magDb[gBoundBin[c]];
-		const int lo = std::max(kNeighborOffsetBins * 2, gBoundBin[c] - kGlideBinRadius);
-		const int hi = std::min(kNumBins - kNeighborOffsetBins * 2 - 1, gBoundBin[c] + kGlideBinRadius);
+		// Cents-based glide window (ground-rules 6.2's "+-~50 cents"), not a fixed
+		// bin count -- see kGlideCents.
+		const int glideRadius = centsToBins(gBoundBin[c], kGlideCents, kGlideBinRadiusMin);
+		const int lo = std::max(gAnalysisLoBin + kNeighborOffsetBins * 2, gBoundBin[c] - glideRadius);
+		const int hi = std::min(gAnalysisHiBin - kNeighborOffsetBins * 2, gBoundBin[c] + glideRadius);
 		for(int i = lo; i <= hi; i++) {
 			if(magDb[i] > newBinMagDb) {
 				newBin = i;
@@ -435,10 +694,14 @@ void analyseFrame(void*)
 		}
 		gBoundBin[c] = newBin;
 		gCandidateFreqHz[c] = interpolatedBinToHz(magDb, newBin);
+		// Decaying high-water mark, not a running max -- see kPeakDecayDbPerSecond
+		// for why a latched one released every cell just after every pluck.
+		gBoundPeakMagDb[c] -= gPeakDecayDbPerFrame;
 		gBoundPeakMagDb[c] = std::max(gBoundPeakMagDb[c], newBinMagDb);
 
-		if(gBoundFrames[c] > kMinBoundHoldFrames) {
-			if(newBinMagDb <= gBoundPeakMagDb[c] - kReleaseMarginDb) {
+		if(gBoundFrames[c] > minHoldFrames) {
+			if(newBinMagDb <= gBoundPeakMagDb[c] - releaseMarginDb
+			   || newBinMagDb < kReleaseFloorDbfs) {
 				gBelowReleaseFrames[c]++;
 			} else {
 				gBelowReleaseFrames[c] = 0;
@@ -456,9 +719,11 @@ void analyseFrame(void*)
 	// ---- gather candidates: stable, prominent, above the floor, not ------
 	// ---- already occupied by a bound or lockout-held cell ----------------
 	struct Candidate { int bin; float magDb; };
-	std::vector<Candidate> candidates;
-	for(int i = 0; i < kNumBins; i++) {
-		if(isProminentPeak(magDb, i) && magDb[i] > kSilenceDbfs
+	static std::vector<Candidate> candidates;   // static: reused, never reallocates
+	                                             // after the first few frames.
+	candidates.clear();
+	for(int i = gAnalysisLoBin; i <= gAnalysisHiBin; i++) {
+		if(isProminentPeak(magDb, i, prominenceDb) && magDb[i] > kSilenceDbfs
 		   && gPersistence[i] >= kStableHoldFrames && !isBinOccupied(i)) {
 			candidates.push_back({i, magDb[i]});
 		}
@@ -489,11 +754,30 @@ void analyseFrame(void*)
 		int stealTarget = -1;
 		float lowestCutDb = 1e9f;
 		for(int c = 0; c < kNumCells; c++) {
-			if(gCellState[c] != kBound || gBoundFrames[c] <= kMinBoundHoldFrames) continue;
+			if(gCellState[c] != kBound || gBoundFrames[c] <= minHoldFrames) continue;
 			if(gCellCutDbLast[c] < lowestCutDb) {
 				lowestCutDb = gCellCutDbLast[c];
 				stealTarget = c;
 			}
+		}
+		// A steal must be WORTH it. Until 2026-09-14 this was unconditional: the
+		// moment all 12 cells were bound and any candidate at all was left over,
+		// some cell got ripped off its partial. Replayed against the recorded
+		// takes that costs ~725 steals in 33 s on first-cell-take and ~3590 in
+		// 123 s on feedback_ramp_signal_75pct -- a steal every 30-50 ms, i.e. the
+		// pool thrashing rather than holding anything. Lowering the prominence bar
+		// to 10 dB makes it worse, not better, because far more candidates now
+		// qualify. host/harness/multicell_sandbox.py already proposed exactly this
+		// guard (its STEAL_MARGIN_DB, defaulted to 0 there so it reproduced
+		// render.cpp); this is that fix, landed, with a real margin.
+		//
+		// The rule: only steal if the challenger is beating the incumbent's
+		// CURRENT level by kStealMarginDb. Ranking by "least active cell" alone
+		// says which cell is cheapest to take, never whether taking it is an
+		// improvement -- and with 12 cells bound there is always a cheapest one.
+		if(stealTarget >= 0
+		   && candidates[nextCandidate].magDb < magDb[gBoundBin[stealTarget]] + kStealMarginDb) {
+			stealTarget = -1;
 		}
 		if(stealTarget >= 0) {
 			const Candidate& cand = candidates[nextCandidate];
@@ -543,6 +827,15 @@ bool setup(BelaContext *context, void *userData)
 	gLastSeenRebindEpoch.fill(0u);
 	gRebindEpoch.fill(0u);
 	gDuckIncrement = 1.0f / (kRebindDuckS * gSampleRate);
+
+	gPeakDecayDbPerFrame = kPeakDecayDbPerSecond * (float)kHop / gSampleRate;
+
+	// The analysed band (see kAnalysisMinHz). Clamped so the shoulder taps of
+	// isProminentPeak() can never reach outside the bins we actually fill.
+	gAnalysisLoBin = (int)floorf(kAnalysisMinHz * (float)kFftWindow / gSampleRate);
+	gAnalysisHiBin = (int)ceilf(kAnalysisMaxHz * (float)kFftWindow / gSampleRate);
+	gAnalysisLoBin = std::max(1, gAnalysisLoBin);
+	gAnalysisHiBin = std::min(kNumBins - 2, gAnalysisHiBin);
 
 	if(gFft.setup(kFftWindow)) {
 		rt_printf("error setting up Fft\n");
@@ -617,6 +910,14 @@ bool setup(BelaContext *context, void *userData)
 	gWatchCellQ.localControl(false);
 	gWatchLoopGain = kLoopGainDefault;
 	gWatchLoopGain.localControl(false);
+	gWatchMasterBoostDb = kMasterBoostDb;
+	gWatchMasterBoostDb.localControl(false);
+	gWatchProminenceDb = kProminenceDbStart;
+	gWatchProminenceDb.localControl(false);
+	gWatchMinHoldMs = 1000.0f * kMinBoundHoldFrames * (float)kHop / gSampleRate;
+	gWatchMinHoldMs.localControl(false);
+	gWatchReleaseMarginDb = kReleaseMarginDb;
+	gWatchReleaseMarginDb.localControl(false);
 
 	int ret = 0;
 	ret |= gInputWriter.setup(kInputsFilename, kAudioFileBufferSize,
@@ -637,12 +938,17 @@ bool setup(BelaContext *context, void *userData)
 	          context->audioSampleRate, context->audioFrames);
 	rt_printf("  ceiling: %.3f linear   watchdog: %.0f s   fade-in: %.2f s\n",
 	          kOutputCeiling, kWatchdogTimeoutS, kFadeInS);
-	rt_printf("  analysis: window=%d hop=%d (%.1f ms), bind-by-magnitude, "
-	          "steal-least-active when full\n",
-	          kFftWindow, kHop, 1000.0f * kHop / context->audioSampleRate);
+	rt_printf("  analysis: window=%d hop=%d (%.1f ms, %.2f Hz/bin), band %.0f-%.0f Hz "
+	          "(bins %d-%d), bind-by-magnitude, steal-least-active when full\n",
+	          kFftWindow, kHop, 1000.0f * kHop / context->audioSampleRate,
+	          context->audioSampleRate / (float)kFftWindow,
+	          kAnalysisMinHz, kAnalysisMaxHz, gAnalysisLoBin, gAnalysisHiBin);
 	rt_printf("  cell: target=%.1f dB  Q=%.1f  attack=%.1f ms  release=%.0f ms  "
 	          "maxCut=%.1f dB  freqLag=%.0f ms\n",
-	          kTargetDb, kCellQ, kAttackMs, kReleaseMs, kMaxCutDb, 1000.0f * kFreqLagS);
+	          kTargetDb, kCellQ, kAttackMs, kReleaseMs, kMaxCutDb,
+	          1000.0f * kFreqLagS);
+	rt_printf("  master boost: %+.1f dB   prominence: %.1f dB\n",
+	          kMasterBoostDb, kProminenceDbStart);
 	rt_printf("  recording: %s (in), %s (out)\n",
 	          kInputsFilename.c_str(), kOutputsFilename.c_str());
 	rt_printf("  bypass: %u (Watcher-settable; 1 = cells computed but not applied to "
@@ -682,6 +988,11 @@ void render(BelaContext *context, void *userData)
 	const float releaseMs = clampf(gWatchReleaseMs.get(), kReleaseMsMin, kReleaseMsMax);
 	const float cellQ = clampf(gWatchCellQ.get(), kCellQMin, kCellQMax);
 	const float loopGain = clampf(gWatchLoopGain.get(), kLoopGainMin, kLoopGainMax);
+	const float masterBoostDb = clampf(gWatchMasterBoostDb.get(), kMasterBoostDbMin, kMasterBoostDbMax);
+	// The master upward unit -- applied to the input, AHEAD of the cells and of
+	// every detector, for the reason set out at kMasterBoostDb. Not folded into
+	// loopGain: that one is an output trim and stays where it is, after the cells.
+	const float masterGain = powf(10.0f, masterBoostDb / 20.0f);
 
 	static float sLastReleaseMs = kReleaseMs;
 	if(releaseMs != sLastReleaseMs) {
@@ -714,9 +1025,15 @@ void render(BelaContext *context, void *userData)
 		}
 		const float in = audioRead(context, n, kGuitarInputChannel);
 		const float a = std::fabs(in);
-		if(a > inPeak) inPeak = a;
+		if(a > inPeak) inPeak = a;   // the TRUE input peak, pre-master
 
-		gRing[gRingWritePos] = in;
+		// Everything downstream of here -- the STFT that finds candidates, the
+		// per-cell detectors, and the cell chain itself -- sees the post-master
+		// signal, so that a cell's target still means the same thing at any master
+		// setting. See kMasterBoostDb.
+		const float src = in * masterGain;
+
+		gRing[gRingWritePos] = src;
 		gRingWritePos++;
 		if(gRingWritePos >= kRingSize) gRingWritePos = 0;
 		gSamplesSinceHop++;
@@ -725,7 +1042,7 @@ void render(BelaContext *context, void *userData)
 			Bela_scheduleAuxiliaryTask(gAnalysisTask);
 		}
 
-		float sig = in;
+		float sig = src;
 		for(int c = 0; c < kNumCells; c++) {
 			if(gCellState[c] == kBound) {
 				gFreqSlewed[c] += (gCandidateFreqHz[c] - gFreqSlewed[c]) * gFreqLagCoeff;
@@ -745,12 +1062,13 @@ void render(BelaContext *context, void *userData)
 			float envLin;
 			if(gCellState[c] == kBound) {
 				gDetectBpf[c].setFc(freqNow);
-				const float partial = (float)gDetectBpf[c].process(in);
+				const float partial = (float)gDetectBpf[c].process(src);
 				envLin = gEnvelope[c].process(partial);
 			} else {
 				envLin = gEnvelope[c].process(0.0f);
 			}
 			const float partialDb = 20.0f * log10f(std::max(envLin, 1e-9f));
+
 			const float cutDb = clampf(partialDb - targetDb, 0.0f, maxCutDb);
 			const float appliedCutDb = cutDb * gCellDuck[c];
 
@@ -775,7 +1093,9 @@ void render(BelaContext *context, void *userData)
 
 		// bypass (Watcher-settable, see header note): cells above still ran in
 		// full -- this only decides which signal reaches the exciter, exactly
-		// mirroring sc/gen1_cell.scd's Select.ar(bypass, [wet, in]).
+		// mirroring sc/gen1_cell.scd's Select.ar(bypass, [wet, in]). Bypass takes
+		// the RAW input, not the post-master one: the point of it is a dry
+		// reference, and a master-boosted dry path would not be one.
 		const float selected = (bypass ? in : sig) * loopGain;
 
 		float out = 0.0f;
