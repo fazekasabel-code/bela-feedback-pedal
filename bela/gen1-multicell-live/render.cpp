@@ -395,9 +395,43 @@ static const int   kNeighborOffsetBins = 4;
 // A fixed bin count could not express either rule; a cents radius can, and it
 // falls out of the bigger window above for free.
 static const float kGlideCents = 50.0f;          // ground-rules 6.2's glide window, as written
-static const float kExclusionCents = 110.0f;     // just over a semitone: two cells never fight
-                                                  // over one partial, but adjacent semitones
-                                                  // can each hold their own.
+// 2026-09-17, Abel: 110 -> 50, i.e. the keep-out radius is now exactly the glide
+// window. 110 was wrong against its own stated intent and against the doc.
+//
+// Its comment claimed "just over a semitone ... adjacent semitones can each hold
+// their own". A semitone is 100 cents and 110 was the keep-out, so adjacent
+// semitones were precisely what it blocked -- the one case it was written to
+// permit.
+//
+// And ground-rules 6.2 / 7 already define this boundary, in the glide window:
+// "within +-50 cents => the same partial moving. Outside => a new event, a new
+// cell." Two different radii for one question left a band, 50-110 cents, that
+// could neither be glided onto (beyond glide reach) nor allocated a cell of its
+// own (inside the keep-out). Measured across the range: 83-110 cents at 330 Hz,
+// 55-108 cents at 1 kHz and at 2 kHz. A partial landing in it beside a live
+// incumbent was unregulated for as long as that incumbent held its slot, with
+// clampToCeiling the only thing underneath it.
+//
+// One radius, one meaning: if the glide can reach it, it is the same partial and
+// one cell owns it; if it cannot, it is a different partial and may have a cell.
+//
+// What made this safe to shrink is the collision-resolution pass added earlier
+// today. The extra width in 110 was doing a second job -- keeping cells from
+// converging on one partial -- badly, since the glide ignored it entirely. That
+// job now has its own explicit enforcement, so this radius only has to answer the
+// question it is named for.
+//
+// WHAT IS LEFT, stated rather than papered over: above ~600 Hz the two radii come
+// out to the same bin count and the dead zone is gone entirely. Below that the
+// BIN-COUNT floors still differ -- kGlideBinRadiusMin 2 against
+// kExclusionBinRadiusMin 3 -- leaving exactly one bin of it (offset 3: 83 cents
+// at 330 Hz, widening to 316 cents at the low E, where a bin is a large fraction
+// of a semitone). That residue is deliberate. An 8192-point Hann window's
+// mainlobe is about 4 bins wide, so two cells 2 bins apart at the bottom of the
+// range would both be sitting on the same peak's mainlobe. The exclusion floor of
+// 3 is what stops that, and it is a property of the window, not of the
+// musical rule this constant expresses.
+static const float kExclusionCents = 50.0f;
 static const int   kGlideBinRadiusMin = 2;
 static const int   kExclusionBinRadiusMin = 3;
 // Anti-chatter minimum hold, ~232 ms at hop 256 -- guards both release and being
