@@ -8,7 +8,7 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 
 ---
 
-> **Status, 2026-09-13 — Phase 4 passed, Phase 5 built and awaiting its real-loop session.** Rig
+> **Status, 2026-09-13 — Phase 4 passed, Phase 5 built and awaiting its real-loop session.** (Superseded by the 2026-09-17 block below — Phase 5 has now had its sessions.) Rig
 > is **v4** in `rig-profile.json` (bumped from v3 same day, see below). The M4
 > buffer/preamp is **out** (confirmed ground-loop source, see ground-rules §4.4), guitar runs
 > **direct/unbuffered into Bela ch0**, exciter is fed from Bela **ch1** via the DTA120 — both
@@ -93,6 +93,69 @@ Each phase below states: **what gets built**, **who is needed**, and the **exit 
 > Everything above is logged
 > under `logs/2026-09-13/`; see `docs/ground-rules-and-facts.md` §4.4 for the ground-loop
 > story and phase-plan Phase 1/3 sections below for the full measurement writeups.
+
+> **Status, 2026-09-17 — Phase 5's first real tuning sessions. Abel's verdict: "behaves fairly
+> well."** The session started from his report that the texture was still not a cluster:
+> "usually the low E string vibrating extremely and the rest are quiet." Five fixes, in the
+> order they were found, each one surfaced by playing rather than by analysis:
+>
+> 1. **The detector could not see the low E.** The 2026-09-14 change claimed a 43 Hz detection
+>    floor; it shipped 86.1 Hz. The window change alone would have given 43 Hz, but the
+>    band-limiting optimisation landed in the same commit rewrote the prominence guard to be
+>    relative to the analysed band, so the band's 45 Hz floor was *added* to the 8-bin shoulder
+>    margin. The low E fundamental (82.41 Hz) is the only standard-tuning string fundamental
+>    below that line — it alone could never bind a cell, was never regulated, and ran away into
+>    the output ceiling while every other string was held at the target. **This was the whole
+>    reported symptom.** The detect band and the filled band are now separate things, the
+>    detect band equals the actuator's own frequency range, and `setup()` prints the resulting
+>    floor in Hz and warns if it lands above the low E — a comment asserting a number the code
+>    did not produce is how this survived. Floor is now 53.8 Hz at 44.1 kHz. **Open:** the
+>    shoulder margin costs 8 *bins*, so at 96 kHz with this window the floor returns to 105 Hz;
+>    reachable by changing the sample rate alone, which is still an open Phase 0/1 choice.
+> 2. **Two cells doubling on one partial** (seen live straight after fix 1: cells 0 and 11 both
+>    on 80 Hz, cells 6 and 9 both on 734 Hz). The keep-out radius was enforced in exactly one
+>    place, at candidate-gather time, which covers binding and nothing else — the glide had no
+>    occupancy check at all, so a cell that bound to a sidelobe walked uphill into the peak and
+>    collided. Not merely a wasted cell: every cell detects from the raw pre-cell input, so two
+>    cells on one partial each compute the *full* correction and both apply it, doubling the
+>    control loop's gain and driving that partial well below target. Now enforced at all three
+>    points where it can break, with a collision-resolution pass in which the newcomer gives way.
+> 3. **An audible click on rebind under load.** The rebind duck ramped *in* over 50 ms but went
+>    *out* via a single-sample assignment to zero — a gain step whose size is the cut the cell
+>    was holding. Measured: 15.000 dB/sample before, 0.023 dB/sample after. The frequency is now
+>    also held until the cut is fully out, which is what ducking was for in the first place.
+> 4. **Envelope attack reclassified and retuned.** Raised by Abel against plucked notes: at 3 ms
+>    the envelope tracks the pluck transient (20–30 dB above the sustain level) and flattens the
+>    attack of every note. See ground-rules §6.3's 2026-09-17 revision for the argument — the
+>    rule ("faster than loop growth") is right, the 1–5 ms value was ~300× tighter than it needs
+>    to be, and a slow attack is the correct *discriminator* between fast plucks and slow
+>    feedback growth. Now a live control, 1–500 ms, **default 300 ms, set by Abel's ear** (rule
+>    16). The safety margin is the bound, not the value.
+> 5. **Keep-out radius 110 → 50 cents**, Abel's call, making it exactly the glide window as
+>    ground-rules §6.2/§7 already define that boundary. 110 contradicted its own comment (it
+>    claimed to let adjacent semitones each hold a cell; a semitone is 100 cents, so that was the
+>    one case it blocked) and left a 50–110 cent band that could neither be glided onto nor
+>    allocated a cell — a partial landing there beside a live incumbent was unregulated for as
+>    long as that incumbent held. **This closes the 2026-09-13 sandbox finding flagged above** as
+>    "a bin-exclusion radius that may be too wide for closely-spaced guitar partials." Dead zone
+>    is gone above ~600 Hz; one bin of it remains below, deliberately, because an 8192-point Hann
+>    mainlobe is ~4 bins wide.
+>
+> Also fixed in passing: the "steal the least active cell" selection used a strict minimum over
+> the current cut, so with several cells at exactly 0.0 dB (a normal state — a cell bound below
+> the target cuts nothing and is *armed*, not idle) the winner was whichever had the lowest
+> index. Now ties break by quietest partial, which is both the least valuable slot and the
+> lowest bar for the challenger.
+>
+> **Not done, deliberately.** `min_hold_ms` is still at its 232 ms default, so the ~280 ms
+> release/rebind cycling documented at `kMinBoundHoldFrames` is unchanged — the offline sweep
+> suggests 700 ms but ground-rules §6.3 calls release timing musical, so it is Abel's call and
+> he has not made it. `prominence_db` was tried at 16 (from 10): "maybe better but no great
+> difference," which is itself informative — sidelobe binding is not the dominant churn source.
+> Growth-rate arming, the formal jump test and the loop simulator all remain where Phase 5 left
+> them. **Gap against CLAUDE.md rule 11:** the live takes this session were Abel playing and
+> judging by ear; no log records were written for them, so the parameter sets that produced
+> "behaves fairly well" are recorded only as committed constants, not as `logs/` entries.
 
 ---
 

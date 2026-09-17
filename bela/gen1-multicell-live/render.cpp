@@ -530,8 +530,8 @@ static const int   kLockoutFrames = 20;          // ground-rules 6.2's "short lo
 //      300 ms          0.75  dB
 //     1000 ms          2.5   dB
 //
-// So 3 ms is roughly 300x faster than the requirement it was set by. The margin
-// is real but it was being paid for at an absurd exchange rate.
+// So the old 3 ms was roughly 300x faster than the requirement it was set by. The
+// margin is real but it was being paid for at an absurd exchange rate.
 //
 // What it costs, and why Abel raised it: a pluck sits 20-30 dB above the level
 // the note sustains at, so at 3 ms the envelope tracks the TRANSIENT and the cut
@@ -552,7 +552,23 @@ static const int   kLockoutFrames = 20;          // ground-rules 6.2's "short lo
 // rate. That is the safety margin, now stated as a number instead of a habit.
 static const float kTargetDb = -24.0f;
 static const float kCellQ = 10.0f;
-static const float kAttackMs = 3.0f;
+// 300 ms as of 2026-09-17, Abel's judgement after a live session: "let's now save
+// attack at 300ms that seems to be best." Was 3.0f, which is what this had
+// inherited from gen1-cell. CLAUDE.md rule 16 -- the metrics are a stand-in for
+// his ears, and when the two disagree the metric is the bug -- so this is the
+// value, not a proposal.
+//
+// Costs 0.75 dB of overshoot at the rig's measured ~2.5 dB/s growth (see the
+// table above), against a ceiling 27 dB above the levels this rig actually runs
+// at. The safety margin is the BOUND, kAttackMsMax, not this number.
+//
+// NOTE the deliberate near-symmetry with kReleaseMs (400 ms): the comment above
+// warns that past ~200 ms the envelope stops being asymmetric and the cut starts
+// following each note's own amplitude envelope. That is now the shipped default
+// and it was chosen by ear anyway. If a future session finds the cut pumping with
+// the playing rather than with the feedback, raising kReleaseMs is the first move,
+// not lowering this.
+static const float kAttackMs = 300.0f;
 static const float kReleaseMs = 400.0f;
 static const float kMaxCutDb = 30.0f;
 // ------------------------------------------------ REDUCTION PROFILE

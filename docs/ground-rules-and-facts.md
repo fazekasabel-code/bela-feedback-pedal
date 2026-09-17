@@ -327,8 +327,8 @@ One **peaking-EQ biquad with negative gain** per cell — not a fixed notch. Par
   - attack: 1–5 ms. **The attack must be faster than the loop's growth rate** or the mode gets away.
     - **Revised 2026-09-17: 1–5 ms satisfies that rule by roughly 300x, and the margin was being paid for at an absurd exchange rate.** Overshoot ≈ growth rate × attack time, and this rig's measured growth is ~1–2.5 dB/s, so at 2.5 dB/s: 3 ms costs 0.008 dB, 100 ms costs 0.25 dB, 300 ms costs 0.75 dB, 500 ms costs 1.25 dB. The rule stands; the range it implied was set by habit rather than by the number.
     - **What the fast attack costs.** A pluck sits 20–30 dB above the level the note sustains at, so at 3 ms the envelope tracks the *transient* and the cut slams to (transient − target) inside the pluck: the attack of every note is flattened, and a 20–30 dB gain change in 3 ms is itself an audible artifact. Raised by Abel 2026-09-17 while chasing a click, alongside the rebind-duck discontinuity fixed the same day.
-    - **A slow attack is the correct discriminator, not a compromise.** Feedback growth is slow and pluck transients are fast, so a slow attack ignores plucks and regulates only sustained growth — which is the actual job. Attack is therefore **reclassified from a fixed safety margin to a bounded musical control**, live in the GUI as `attack_ms`, range 1–500 ms, clamped in code, default unchanged at 3 ms. The safety margin is now the *bound* (500 ms ⇒ ≤1.25 dB overshoot) rather than the value. It is not a hard rule in CLAUDE.md's sense and never was — the ceiling, the watchdog and the mute paths remain unreachable from any slider.
-    - **Interaction:** release is 400 ms. Past ~200 ms of attack the envelope is near-symmetric and the cut starts following each note's own amplitude envelope (pumping). Raise release alongside it.
+    - **A slow attack is the correct discriminator, not a compromise.** Feedback growth is slow and pluck transients are fast, so a slow attack ignores plucks and regulates only sustained growth — which is the actual job. Attack is therefore **reclassified from a fixed safety margin to a bounded musical control**, live in the GUI as `attack_ms`, range 1–500 ms, clamped in code. **Default set to 300 ms the same day**, by Abel's ear after a live session (rule 16); it had been 3 ms, inherited from `gen1-cell`. 300 ms costs 0.75 dB of overshoot at the measured growth rate. The safety margin is now the *bound* (500 ms ⇒ ≤1.25 dB overshoot) rather than the value. It is not a hard rule in CLAUDE.md's sense and never was — the ceiling, the watchdog and the mute paths remain unreachable from any slider.
+    - **Interaction:** release is 400 ms, so at the 300 ms default the envelope is deliberately near-symmetric — past ~200 ms of attack the cut begins following each note's own amplitude envelope rather than the feedback's growth. That was accepted by ear. If a future session finds it pumping with the playing, **raise release first**, do not lower attack.
   - release: 100 ms – 2 s. This is a musical parameter — it sets how long a partial stays "used up" before it can bloom again, i.e. how the texture breathes.
 - On release, the gain **ramps back**; it never resets instantly, or a returning mode gets a free run.
 
@@ -420,7 +420,7 @@ Abel's observation, restated precisely: slow frequency drift (a partial gliding 
 | Analysis hop (STFT) | ≤ 6 ms |
 | Goertzel candidate bank | ≤ 1 block |
 | Growth-score confirmation | 2–3 frames |
-| Cell attack | 1–500 ms (live control; default 3 ms — see §6.3's 2026-09-17 revision) |
+| Cell attack | 1–500 ms (live control; **default 300 ms** — see §6.3's 2026-09-17 revision) |
 | **Total, jump to regulation** | **< 25 ms** |
 
 ---

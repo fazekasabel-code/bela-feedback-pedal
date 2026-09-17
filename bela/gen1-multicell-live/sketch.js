@@ -125,13 +125,14 @@ function setup() {
 	addCheckbox('bypass',         'bypass',                             16 + colW * 3, row3);
 	// Row 4: the envelope's attack, live as of 2026-09-17 (see render.cpp's
 	// kAttackMs comment for why it stopped being a fixed safety constant). This is
-	// the plucked-note knob. At the 3 ms default the envelope tracks the pluck
+	// the plucked-note knob. Default is 300 ms as of 2026-09-17, Abel's judgement
+	// after a live session. At the old 3 ms the envelope tracked the pluck
 	// TRANSIENT, which sits 20-30 dB above the level the note sustains at, so the
-	// cut slams on inside the pluck and flattens the attack of every note. Slow it
-	// down and the transient passes while sustained growth is still regulated --
+	// cut slammed on inside the pluck and flattened the attack of every note. Slow
+	// it down and the transient passes while sustained growth is still regulated --
 	// feedback grows at ~1-2.5 dB/s, so even 500 ms overshoots by only ~1.25 dB.
-	// Past ~200 ms raise release_ms alongside it or the cut starts pumping with
-	// each note's own envelope.
+	// At 300 ms against a 400 ms release the envelope is near-symmetric; if the cut
+	// starts pumping with the playing rather than the feedback, raise release_ms.
 	addSlider('attack_ms',        'ATTACK (ms)',         1, 500,  1,   16,            row4);
 }
 
