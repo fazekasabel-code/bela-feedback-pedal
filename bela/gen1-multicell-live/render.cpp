@@ -191,6 +191,9 @@ Watcher<float> gWatchLoopGain("loop_gain");
 // MASTER UPWARD UNIT block and kProminenceDbStart below.
 Watcher<float> gWatchMasterBoostDb("master_boost_db");
 
+// Envelope attack, made live 2026-09-17 -- see kAttackMs.
+Watcher<float> gWatchAttackMs("attack_ms");
+
 // Reduction profile, 2026-09-17 -- see the REDUCTION PROFILE block below.
 Watcher<float> gWatchSlope("reduction_slope");
 Watcher<float> gWatchKneeDb("knee_db");
@@ -463,11 +466,44 @@ static const int   kLockoutFrames = 20;          // ground-rules 6.2's "short lo
 // relevant ones (target/maxCut/release/Q) are live-tunable from the browser
 // GUI while a session runs -- these are now their STARTING values, not fixed
 // constants; see gWatchTargetDb etc. above and the per-sample read below.
-// kAttackMs and kFreqLagS stay fixed constants, not exposed as live controls
-// on purpose: attack is a safety margin (ground-rules 6.3 -- "must be faster
-// than the loop's growth rate"), not a taste knob, and freqLag is what keeps
-// coefficient updates click-free (ground-rules 6.3) rather than something
-// that reads as "tone".
+// kFreqLagS stays a fixed constant, not exposed as a live control on purpose:
+// it is what keeps coefficient updates click-free (ground-rules 6.3) rather than
+// something that reads as "tone".
+//
+// kAttackMs WAS in that sentence too, on the grounds that attack is a safety
+// margin -- ground-rules 6.3's "must be faster than the loop's growth rate" --
+// and not a taste knob. As of 2026-09-17 it is live, at its same default. The
+// reclassification, Abel's call, with the arithmetic that justifies it:
+//
+// Overshoot from a slow attack is roughly growth rate x attack time, and this
+// rig's measured growth is ~1-2.5 dB/s (bela/detector-passthrough):
+//
+//       attack     overshoot at 2.5 dB/s
+//        3 ms          0.008 dB
+//      100 ms          0.25  dB
+//      300 ms          0.75  dB
+//     1000 ms          2.5   dB
+//
+// So 3 ms is roughly 300x faster than the requirement it was set by. The margin
+// is real but it was being paid for at an absurd exchange rate.
+//
+// What it costs, and why Abel raised it: a pluck sits 20-30 dB above the level
+// the note sustains at, so at 3 ms the envelope tracks the TRANSIENT and the cut
+// slams to (transient - target) inside the pluck. That flattens the attack of
+// every note, and a 20-30 dB gain change in 3 ms is itself an audible artifact --
+// a second click source, separate from the rebind duck fixed the same day.
+//
+// A slow attack is not a compromise against safety here, it is the correct
+// DISCRIMINATOR: feedback growth is slow and pluck transients are fast, so a slow
+// attack ignores plucks and regulates only sustained growth, which is exactly the
+// job. ground-rules 6.3 updated in the same commit rather than contradicted.
+//
+// Interaction worth knowing before turning it far: release is 400 ms. Past about
+// 200 ms of attack the envelope is near-symmetric and the cut starts following
+// each note's own amplitude envelope -- pumping. Raise release alongside it.
+//
+// The upper bound is 500 ms, which is 1.25 dB of overshoot at the measured growth
+// rate. That is the safety margin, now stated as a number instead of a habit.
 static const float kTargetDb = -24.0f;
 static const float kCellQ = 10.0f;
 static const float kAttackMs = 3.0f;
@@ -602,6 +638,7 @@ static const float kCellQMin = 2.0f,      kCellQMax = 30.0f;
 // backstop and is unchanged, but a backstop doing musical work means this is set
 // too high.
 static const float kMasterBoostDbMin = -12.0f, kMasterBoostDbMax = 30.0f;
+static const float kAttackMsMin = 1.0f, kAttackMsMax = 500.0f;
 static const float kProminenceDbMin = 3.0f, kProminenceDbMax = 30.0f;
 // Loop gain: a software multiplier on the cells' output, standing in for
 // walking back to the DTA120 knob for every experiment. Deliberately capped
@@ -1177,6 +1214,8 @@ bool setup(BelaContext *context, void *userData)
 	gWatchLoopGain.localControl(false);
 	gWatchMasterBoostDb = kMasterBoostDb;
 	gWatchMasterBoostDb.localControl(false);
+	gWatchAttackMs = kAttackMs;
+	gWatchAttackMs.localControl(false);
 	gWatchSlope = kSlope;
 	gWatchSlope.localControl(false);
 	gWatchKneeDb = kKneeDb;
@@ -1291,6 +1330,7 @@ void render(BelaContext *context, void *userData)
 	const float targetDb = clampf(gWatchTargetDb.get(), kTargetDbMin, kTargetDbMax);
 	const float maxCutDb = clampf(gWatchMaxCutDb.get(), kMaxCutDbMin, kMaxCutDbMax);
 	const float releaseMs = clampf(gWatchReleaseMs.get(), kReleaseMsMin, kReleaseMsMax);
+	const float attackMs = clampf(gWatchAttackMs.get(), kAttackMsMin, kAttackMsMax);
 	const float cellQ = clampf(gWatchCellQ.get(), kCellQMin, kCellQMax);
 	const float loopGain = clampf(gWatchLoopGain.get(), kLoopGainMin, kLoopGainMax);
 	const float masterBoostDb = clampf(gWatchMasterBoostDb.get(), kMasterBoostDbMin, kMasterBoostDbMax);
@@ -1306,6 +1346,11 @@ void render(BelaContext *context, void *userData)
 	if(releaseMs != sLastReleaseMs) {
 		for(int c = 0; c < kNumCells; c++) gEnvelope[c].setReleaseTime(releaseMs);
 		sLastReleaseMs = releaseMs;
+	}
+	static float sLastAttackMs = kAttackMs;
+	if(attackMs != sLastAttackMs) {
+		for(int c = 0; c < kNumCells; c++) gEnvelope[c].setAttackTime(attackMs);
+		sLastAttackMs = attackMs;
 	}
 	static float sLastCellQ = kCellQ;
 	if(cellQ != sLastCellQ) {

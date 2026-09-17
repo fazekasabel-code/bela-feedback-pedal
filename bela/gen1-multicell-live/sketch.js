@@ -100,7 +100,7 @@ function setup() {
 	// unit, which is the one control here that changes how much energy the loop
 	// carries. Row 2 is what the allocator will even look at. Row 3 is the
 	// release-side anti-chatter pair and the output stage.
-	const row1 = 150, row2 = 200, row3 = 250, colW = 210;
+	const row1 = 150, row2 = 200, row3 = 250, row4 = 300, colW = 210;
 	addSlider('target_db',       'target (dB)',       -48, -6,   0.5, 16,            row1);
 	addSlider('max_cut_db',      'max cut (dB)',        3, 40,   0.5, 16 + colW,     row1);
 	addSlider('master_boost_db', 'MASTER boost (dB)', -12, 30,   0.5, 16 + colW * 2, row1);
@@ -123,6 +123,16 @@ function setup() {
 	addSlider('release_margin_db','release margin (dB)', 3, 40,   0.5, 16 + colW,     row3);
 	addSlider('loop_gain',        'loop gain (x)',       0, 1.5,  0.01, 16 + colW * 2, row3);
 	addCheckbox('bypass',         'bypass',                             16 + colW * 3, row3);
+	// Row 4: the envelope's attack, live as of 2026-09-17 (see render.cpp's
+	// kAttackMs comment for why it stopped being a fixed safety constant). This is
+	// the plucked-note knob. At the 3 ms default the envelope tracks the pluck
+	// TRANSIENT, which sits 20-30 dB above the level the note sustains at, so the
+	// cut slams on inside the pluck and flattens the attack of every note. Slow it
+	// down and the transient passes while sustained growth is still regulated --
+	// feedback grows at ~1-2.5 dB/s, so even 500 ms overshoots by only ~1.25 dB.
+	// Past ~200 ms raise release_ms alongside it or the cut starts pumping with
+	// each note's own envelope.
+	addSlider('attack_ms',        'ATTACK (ms)',         1, 500,  1,   16,            row4);
 }
 
 function windowResized() {
@@ -177,9 +187,11 @@ function draw() {
 		// changes how much energy the loop carries, and so the direct lever on how
 		// many partials sustain. Everything else decides what the cells see and
 		// how steadily they hold it.
-		// The two controls that do the two different jobs: master recruits modes,
-		// slope decides whether they sit at comparable level.
-		const hot = (name === 'master_boost_db' || name === 'reduction_slope');
+		// The three controls that do the three different jobs: master recruits
+		// modes, slope decides whether they sit at comparable level, and attack
+		// decides whether a pluck's transient is regulated or passes through.
+		const hot = (name === 'master_boost_db' || name === 'reduction_slope'
+		             || name === 'attack_ms');
 		fill(hot ? color(235, 200, 110) : color(190));
 		const suffix = (name === 'loop_gain' || name === 'reduction_slope')
 			? num(name, 2) : num(name, 1);
@@ -188,7 +200,7 @@ function draw() {
 
 	// ---- per-cell grid ------------------------------------------------------
 	const cols = 4;
-	const gridTop = 310, cellW = 190, cellH = 92, pad = 10;
+	const gridTop = 360, cellW = 190, cellH = 92, pad = 10;
 	for (let c = 0; c < kNumCells; c++) {
 		const col = c % cols;
 		const row = Math.floor(c / cols);
