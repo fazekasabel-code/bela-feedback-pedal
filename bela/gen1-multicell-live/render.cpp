@@ -89,7 +89,9 @@
  *      detector could not see anything below 172 Hz -- the bottom three open
  *      strings -- and its keep-out radius forbade two cells within 129 Hz of
  *      each other, which is most of the guitar. Paid for by analysing only the
- *      45-2500 Hz band (kAnalysisMinHz), so it costs less per hop, not more.
+ *      band the cells actually use, so it costs less per hop, not more. (That
+ *      optimisation also silently raised the detection floor to 86 Hz and hid the
+ *      low E -- fixed 2026-09-17, see the DETECT/FILLED band comment.)
  *   2. Glide and keep-out radii became cents-based (kGlideCents), which is what
  *      ground-rules 6.2 specifies and a fixed bin count could not express.
  *   3. The release high-water mark now decays (kPeakDecayDbPerSecond). Latched,
@@ -110,6 +112,18 @@
  *      what the cells can SEE and how steadily they hold it. Its placement ahead
  *      of the cells rather than after them is measured, not incidental -- see
  *      that constant.
+ *
+ * 2026-09-17 DETECTOR FLOOR FIX ("usually the low E vibrating extremely and the
+ * rest are quiet"). Item 1 above raised the detection floor to 86.1 Hz instead of
+ * the 43 Hz it claims, putting the low E fundamental (82.41 Hz) -- the only
+ * standard-tuning string fundamental below that line -- permanently outside the
+ * detector. It could never bind a cell, was never regulated, and ran away into
+ * the output ceiling while every other string was held at the target. The detect
+ * band is now its own thing, equal to the actuator's frequency range, with the
+ * filled band derived from it; see the DETECT/FILLED band comment for the full
+ * account and for the same bug at the top end. Floor is now 53.8 Hz at 44.1 kHz,
+ * printed at startup rather than asserted in a comment.
+ *
  * The safety net is untouched by all of it: kOutputCeiling, the non-finite mute
  * and the fade-in are exactly as they were (rules 1, 4). The watchdog is a
  * separate, later, deliberate change -- see kWatchdogTimeoutS.
@@ -285,11 +299,48 @@ static const int   kHop = 256;
 static const int   kNumBins = kFftWindow / 2 + 1;
 static const int   kRingSize = kFftWindow * 2;
 
-// Only this band is analysed at all (see the window comment above). Slightly
-// wider than [kMinCellFreqHz, kMaxCellFreqHz] so a partial at the very edge
-// still has its shoulder bins inside the analysed range.
-static const float kAnalysisMinHz = 45.0f;
-static const float kAnalysisMaxHz = 2500.0f;
+// ---- the DETECT band and the FILLED band, 2026-09-17. These are two different
+// things and conflating them is what produced the bug this change fixes.
+//
+// THE BUG. Commit 220d2ae ("make the detector see the guitar") changed two things
+// at once: the window 2048 -> 8192, and a new band-limiting optimisation that
+// stopped converting the whole spectrum to dB. Its header claims "the detection
+// floor drops to 43 Hz", which was true of the window change ALONE -- at 8192 a
+// bin is 5.4 Hz and isProminentPeak()'s shoulder guard rejected bins below
+// kNeighborOffsetBins*2 = 8, i.e. 43.1 Hz. The same commit then rewrote that
+// guard to reject bins below gAnalysisLoBin + kNeighborOffsetBins*2, so the
+// 45 Hz floor of the new optimisation was ADDED to the 8-bin shoulder margin:
+//
+//     floor = bin 8 (45 Hz) + 8 = bin 16 = 86.1 Hz
+//
+// The low E fundamental is 82.41 Hz = bin 15.3. It is the ONLY string fundamental
+// in standard tuning below that floor -- A is bin 20.4, D bin 27.3, G bin 36.4.
+// So the low E could never bind a cell, was never regulated, and ran away into
+// clampToCeiling() while every other string was held at the target. The glide
+// search was clamped to the same floor, so a cell could not even drift onto it.
+// The 43 Hz floor never actually shipped; the two halves of one commit cancelled.
+//
+// THE FIX is to stop deriving one band from the other by arithmetic in a comment.
+// There are two bands and the code now names both:
+//
+//   DETECT band [gDetectLoBin, gDetectHiBin] -- bins that may hold a peak. This
+//     IS the detector floor. It equals the actuator's own frequency range: a cell
+//     must be able to sit exactly where its detector found the peak. Bind outside
+//     it and freqNow's clamp parks the actuator somewhere the partial isn't, the
+//     detector never sees its own cut work, and the cut grows to maxCut -- a
+//     permanent notch on a frequency nothing is playing. That failure was already
+//     reachable at the TOP end before this change: peaks up to ~2460 Hz could
+//     bind while kMaxCellFreqHz clamped the actuator to 2000 Hz.
+//   FILLED band [gAnalysisLoBin, gAnalysisHiBin] -- bins converted to dB at all.
+//     The detect band widened by a full shoulder span (kNeighborOffsetBins*2) at
+//     each end, so every tested bin's taps land on real data. This is what pays
+//     for the 8192 window; it is an optimisation and must never set the floor.
+//
+// setup() derives both and then re-clamps the detect band to what the filled band
+// can actually support, so the invariant holds by construction at any window size
+// or sample rate rather than by someone redoing this arithmetic. It also prints
+// the resulting floor in Hz, because a comment asserting a number the code does
+// not produce is exactly how this bug survived.
 static const float kGrowthSmoothing = 0.6f;      // telemetry only, see header note
 static const int   kStableHoldFrames = 2;
 static const float kReleaseMarginDb = 10.0f;    // starting value; live, see gWatchReleaseMarginDb
@@ -476,6 +527,9 @@ static const float kKneeDb = 0.0f;
 static const float kKneeDbMin = 0.0f, kKneeDbMax = 24.0f;
 
 static const float kFreqLagS = 0.02f;
+// The actuator's frequency range, and therefore the DETECT band -- see the
+// DETECT/FILLED band comment above. Changing either of these moves the detector
+// floor/ceiling with it, which is the point: they are one number, not two.
 static const float kMinCellFreqHz = 55.0f;
 static const float kMaxCellFreqHz = 2000.0f;
 
@@ -604,11 +658,13 @@ static std::vector<int>   gPersistence(kNumBins, 0);
 static float gSampleRate = 44100.0f;
 static AuxiliaryTask gAnalysisTask;
 
-// The analysed band, in bins (see kAnalysisMinHz/kAnalysisMaxHz). Everything
-// outside it is never converted to dB or peak-tested at all -- that is what pays
-// for the longer window. Set once in setup().
+// The two bands -- see the DETECT/FILLED band comment in the constants. Both set
+// once in setup(). FILLED is what gets converted to dB (the optimisation that
+// pays for the 8192 window); DETECT is what may hold a peak (the detector floor).
 static int gAnalysisLoBin = 0;
 static int gAnalysisHiBin = kNumBins - 1;
+static int gDetectLoBin = 0;
+static int gDetectHiBin = kNumBins - 1;
 
 // Scratch for one analysis frame. Static rather than a local std::vector: at
 // kNumBins = 4097 a per-hop local would mean a heap allocation every 5.8 ms.
@@ -700,11 +756,12 @@ static inline int centsToBins(int bin, float cents, int minBins)
 // Same shape as bela/gen1-cell's isProminentPeak(), but the threshold is now a
 // live parameter rather than a compile-time 25 dB -- see kProminenceDbStart for
 // why that constant was tuned for the opposite problem to the one we have.
-// Bounded to the analysed band (gAnalysisLoBin/HiBin) rather than the whole
-// spectrum; bins outside it never had their dB computed.
+// Bounded to the DETECT band, not the filled one -- see the DETECT/FILLED band
+// comment in the constants for the 86 Hz floor this fixes. setup() guarantees
+// the shoulder taps below stay inside the filled band for every bin in it.
 static bool isProminentPeak(const std::vector<float>& magDb, int i, float prominenceDb)
 {
-	if(i < gAnalysisLoBin + kNeighborOffsetBins * 2 || i > gAnalysisHiBin - kNeighborOffsetBins * 2)
+	if(i < gDetectLoBin || i > gDetectHiBin)
 		return false;
 	if(magDb[i] < magDb[i - 1] || magDb[i] < magDb[i + 1])
 		return false;
@@ -759,7 +816,8 @@ void analyseFrame(void*)
 
 	gFft.fft(gAnalysisFrame);
 
-	// Only the analysed band, not all kNumBins -- see kAnalysisMinHz. This is
+	// Only the FILLED band, not all kNumBins -- see the DETECT/FILLED band
+	// comment in the constants. This is
 	// what keeps the 8192-point window cheaper per hop than the 2048 one was:
 	// ~430 log10f calls instead of 1025.
 	std::vector<float>& magDb = gMagDb;
@@ -794,8 +852,10 @@ void analyseFrame(void*)
 		// Cents-based glide window (ground-rules 6.2's "+-~50 cents"), not a fixed
 		// bin count -- see kGlideCents.
 		const int glideRadius = centsToBins(gBoundBin[c], kGlideCents, kGlideBinRadiusMin);
-		const int lo = std::max(gAnalysisLoBin + kNeighborOffsetBins * 2, gBoundBin[c] - glideRadius);
-		const int hi = std::min(gAnalysisHiBin - kNeighborOffsetBins * 2, gBoundBin[c] + glideRadius);
+		// Clamped to the DETECT band for the same reason isProminentPeak() is: a cell
+		// must never glide somewhere its actuator cannot follow it to.
+		const int lo = std::max(gDetectLoBin, gBoundBin[c] - glideRadius);
+		const int hi = std::min(gDetectHiBin, gBoundBin[c] + glideRadius);
 		for(int i = lo; i <= hi; i++) {
 			if(magDb[i] > newBinMagDb) {
 				newBin = i;
@@ -832,7 +892,7 @@ void analyseFrame(void*)
 	static std::vector<Candidate> candidates;   // static: reused, never reallocates
 	                                             // after the first few frames.
 	candidates.clear();
-	for(int i = gAnalysisLoBin; i <= gAnalysisHiBin; i++) {
+	for(int i = gDetectLoBin; i <= gDetectHiBin; i++) {
 		if(isProminentPeak(magDb, i, prominenceDb) && magDb[i] > kSilenceDbfs
 		   && gPersistence[i] >= kStableHoldFrames && !isBinOccupied(i)) {
 			candidates.push_back({i, magDb[i]});
@@ -940,12 +1000,17 @@ bool setup(BelaContext *context, void *userData)
 
 	gPeakDecayDbPerFrame = kPeakDecayDbPerSecond * (float)kHop / gSampleRate;
 
-	// The analysed band (see kAnalysisMinHz). Clamped so the shoulder taps of
-	// isProminentPeak() can never reach outside the bins we actually fill.
-	gAnalysisLoBin = (int)floorf(kAnalysisMinHz * (float)kFftWindow / gSampleRate);
-	gAnalysisHiBin = (int)ceilf(kAnalysisMaxHz * (float)kFftWindow / gSampleRate);
-	gAnalysisLoBin = std::max(1, gAnalysisLoBin);
-	gAnalysisHiBin = std::min(kNumBins - 2, gAnalysisHiBin);
+	// The DETECT band is the actuator's own range; the FILLED band is that plus a
+	// shoulder span at each end. See the DETECT/FILLED band comment in the
+	// constants. Order matters: derive both, then re-clamp DETECT to what FILLED
+	// can support, so isProminentPeak()'s +-kNeighborOffsetBins*2 taps are always
+	// on bins that were actually converted to dB -- at any window or sample rate.
+	gDetectLoBin   = (int)floorf(kMinCellFreqHz * (float)kFftWindow / gSampleRate);
+	gDetectHiBin   = (int)ceilf(kMaxCellFreqHz * (float)kFftWindow / gSampleRate);
+	gAnalysisLoBin = std::max(1, gDetectLoBin - kNeighborOffsetBins * 2);
+	gAnalysisHiBin = std::min(kNumBins - 2, gDetectHiBin + kNeighborOffsetBins * 2);
+	gDetectLoBin   = std::max(gDetectLoBin, gAnalysisLoBin + kNeighborOffsetBins * 2);
+	gDetectHiBin   = std::min(gDetectHiBin, gAnalysisHiBin - kNeighborOffsetBins * 2);
 
 	if(gFft.setup(kFftWindow)) {
 		rt_printf("error setting up Fft\n");
@@ -1059,11 +1124,35 @@ bool setup(BelaContext *context, void *userData)
 		rt_printf("  *** no time box: this run does not stop on its own. Abel present "
 		          "(rule 2) and the DTA120 power switch are the backstop. ***\n");
 	}
-	rt_printf("  analysis: window=%d hop=%d (%.1f ms, %.2f Hz/bin), band %.0f-%.0f Hz "
-	          "(bins %d-%d), bind-by-magnitude, steal-least-active when full\n",
+	rt_printf("  analysis: window=%d hop=%d (%.1f ms, %.2f Hz/bin), "
+	          "bind-by-magnitude, steal-least-active when full\n",
 	          kFftWindow, kHop, 1000.0f * kHop / context->audioSampleRate,
-	          context->audioSampleRate / (float)kFftWindow,
-	          kAnalysisMinHz, kAnalysisMaxHz, gAnalysisLoBin, gAnalysisHiBin);
+	          context->audioSampleRate / (float)kFftWindow);
+	// The DETECT floor/ceiling in Hz, computed, not asserted in a comment -- a
+	// comment claiming 43 Hz over code that did 86 Hz is what hid the low E from
+	// this detector for four days. Low E is 82.41 Hz: if the floor printed here is
+	// above that, no cell can ever bind the lowest string.
+	rt_printf("  detect band: %.1f-%.1f Hz (bins %d-%d)   filled band: %.1f-%.1f Hz "
+	          "(bins %d-%d)   low E = 82.41 Hz\n",
+	          gDetectLoBin * context->audioSampleRate / (float)kFftWindow,
+	          gDetectHiBin * context->audioSampleRate / (float)kFftWindow,
+	          gDetectLoBin, gDetectHiBin,
+	          gAnalysisLoBin * context->audioSampleRate / (float)kFftWindow,
+	          gAnalysisHiBin * context->audioSampleRate / (float)kFftWindow,
+	          gAnalysisLoBin, gAnalysisHiBin);
+	// Not a hard failure -- a higher floor could one day be deliberate -- but it is
+	// never allowed to be silent again. The shoulder margin costs kNeighborOffsetBins*2
+	// BINS, so its cost in Hz scales with the sample rate: at 96 kHz and this window
+	// it is 94 Hz and the floor lands at 105 Hz, back above the low E. rig-profile.json
+	// still lists 44.1/48/96 as an open Phase 0/1 choice, so this will be reached by
+	// changing the rate alone, with no edit to this file. The fix if it fires is to
+	// scale kFftWindow with the rate (same resolution in Hz), not to shave the margin.
+	const float detectLoHz = gDetectLoBin * context->audioSampleRate / (float)kFftWindow;
+	if(detectLoHz > 82.41f) {
+		rt_printf("  *** WARNING: detect floor %.1f Hz is ABOVE the low E (82.41 Hz). "
+		          "That string cannot bind a cell and will not be regulated. ***\n",
+		          detectLoHz);
+	}
 	rt_printf("  cell: target=%.1f dB  Q=%.1f  attack=%.1f ms  release=%.0f ms  "
 	          "maxCut=%.1f dB  freqLag=%.0f ms\n",
 	          kTargetDb, kCellQ, kAttackMs, kReleaseMs, kMaxCutDb,
