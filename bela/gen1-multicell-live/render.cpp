@@ -626,6 +626,26 @@ static const float kLoopGainMin = 0.0f, kLoopGainMax = 1.5f;
 // than kFreqLagS so the notch is essentially gone before the frequency is still
 // moving, and slow enough itself not to be its own click.
 static const float kRebindDuckS = 0.05f;
+// ...and the RAMP OUT, added 2026-09-17. kRebindDuckS above is the ramp back IN.
+// Until now the way out was `gCellDuck[c] = 0.0f` -- a single-sample jump. A cell
+// that rebinds while still carrying a substantial cut therefore removed that whole
+// cut instantaneously: a step in the actuator's gain, i.e. a click, whose size is
+// exactly the cut the cell was holding. That is why it is only audible when the
+// system is pushed hard (big cuts) and during heavy bind/release churn (many
+// rebinds) -- the two conditions Abel reported it under, 2026-09-17.
+//
+// The mechanism was right and the asymmetry was simply an oversight: ducking
+// exists so a retarget does not sweep a live notch across the spectrum, and it
+// cannot do that job by starting with a discontinuity of its own.
+//
+// It is also newly more frequent because of the collision-resolution pass added
+// earlier today: that frees a colliding cell, and a freed cell rebinds quickly,
+// so there are more rebinds per second now than there were before it landed.
+//
+// 15 ms is a filter gain morphing smoothly, not a transient -- even 30 dB over
+// 15 ms is a fade, not an edge -- while being short enough that the stale notch
+// on the old frequency is gone long before the new binding needs to act.
+static const float kRebindDuckOutS = 0.015f;
 
 
 static const int kCpuMonitoringAcquisitionBlocks = 1000;
@@ -720,6 +740,14 @@ static std::array<float, kNumCells> gCellCutDbLast{};   // audio thread writes, 
 static std::array<float, kNumCells> gCellDuck{};
 static std::array<unsigned int, kNumCells> gLastSeenRebindEpoch{};
 static float gDuckIncrement = 0.0f;
+// True from the moment a retarget is seen until the duck has reached 0. While it
+// is set, the cell's centre frequency is HELD: the whole point of ducking out is
+// that the cut leaves before the frequency moves, and letting the frequency start
+// travelling immediately (as it did before 2026-09-17) is what the duck exists to
+// prevent. Sequence per retarget: ramp cut out -> release the frequency -> slew to
+// the new partial -> ramp cut back in.
+static std::array<unsigned char, kNumCells> gCellRetargetPending{};
+static float gDuckOutDecrement = 0.0f;
 
 
 static BelaCpuData* gCpuData = nullptr;
@@ -1054,9 +1082,11 @@ bool setup(BelaContext *context, void *userData)
 	gFreqLagCoeff = 1.0f - expf(-1.0f / (kFreqLagS * gSampleRate));
 	gCellCutDbLast.fill(0.0f);
 	gCellDuck.fill(1.0f);
+	gCellRetargetPending.fill(0);
 	gLastSeenRebindEpoch.fill(0u);
 	gRebindEpoch.fill(0u);
 	gDuckIncrement = 1.0f / (kRebindDuckS * gSampleRate);
+	gDuckOutDecrement = 1.0f / (kRebindDuckOutS * gSampleRate);
 
 	gPeakDecayDbPerFrame = kPeakDecayDbPerSecond * (float)kHop / gSampleRate;
 
@@ -1322,20 +1352,32 @@ void render(BelaContext *context, void *userData)
 
 		float sig = src;
 		for(int c = 0; c < kNumCells; c++) {
-			if(gCellState[c] == kBound) {
-				gFreqSlewed[c] += (gCandidateFreqHz[c] - gFreqSlewed[c]) * gFreqLagCoeff;
-			}
-			const float freqNow = clampf(gFreqSlewed[c], kMinCellFreqHz, kMaxCellFreqHz);
-
-			// Rebind duck -- see kRebindDuckS's header comment. A new epoch (fresh
-			// bind or steal) restarts the duck at 0 regardless of where it was;
-			// otherwise it eases back up to 1.
+			// Rebind duck -- see kRebindDuckS / kRebindDuckOutS. Runs BEFORE the
+			// frequency slew below, because it is what decides whether the frequency
+			// is allowed to move this sample at all.
+			//
+			// A new epoch (fresh bind or steal) starts a duck-OUT; it does not zero
+			// the duck outright, which was a single-sample gain step and the click
+			// Abel reported. The frequency is held until the cut is fully out, then
+			// released, then the cut ramps back in over kRebindDuckS.
 			if(gLastSeenRebindEpoch[c] != gRebindEpoch[c]) {
 				gLastSeenRebindEpoch[c] = gRebindEpoch[c];
-				gCellDuck[c] = 0.0f;
+				gCellRetargetPending[c] = 1;
+			}
+			if(gCellRetargetPending[c]) {
+				gCellDuck[c] -= gDuckOutDecrement;
+				if(gCellDuck[c] <= 0.0f) {
+					gCellDuck[c] = 0.0f;
+					gCellRetargetPending[c] = 0;   // the frequency may move from here
+				}
 			} else if(gCellDuck[c] < 1.0f) {
 				gCellDuck[c] = std::min(1.0f, gCellDuck[c] + gDuckIncrement);
 			}
+
+			if(gCellState[c] == kBound && !gCellRetargetPending[c]) {
+				gFreqSlewed[c] += (gCandidateFreqHz[c] - gFreqSlewed[c]) * gFreqLagCoeff;
+			}
+			const float freqNow = clampf(gFreqSlewed[c], kMinCellFreqHz, kMaxCellFreqHz);
 
 			float envLin;
 			if(gCellState[c] == kBound) {
