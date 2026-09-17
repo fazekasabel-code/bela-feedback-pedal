@@ -112,3 +112,60 @@ def test_default_modes_are_peaked_one_or_two_above_unity():
     below = [m for m in DEFAULT_PEAKED_MODES if m.g < 1.0]
     assert 1 <= len(above) <= 2
     assert len(below) >= len(DEFAULT_PEAKED_MODES) - 2
+
+
+def test_slope_zero_and_no_knee_is_the_old_brick_wall():
+    # The regression that matters: the reduction-profile parameters must default to
+    # exactly render.cpp's pre-2026-09-17 law, so adding them changed nothing silently.
+    target_db, max_cut_db = -24.0, 30.0
+    for partial_db in np.linspace(-100.0, 20.0, 241):
+        expected = -min(max(partial_db - target_db, 0.0), max_cut_db)
+        got = _cell_gain_db(partial_db, target_db, max_cut_db, slope=0.0, knee_db=0.0)
+        assert got == pytest.approx(expected, abs=1e-12)
+
+
+def test_slope_one_turns_the_cell_off():
+    for partial_db in np.linspace(-100.0, 20.0, 50):
+        assert _cell_gain_db(partial_db, -24.0, 30.0, slope=1.0) == pytest.approx(0.0, abs=1e-12)
+
+
+def test_negative_slope_over_compresses_below_the_target():
+    # slope < 0 must push the partial BELOW the target, and further below the louder
+    # it is -- that is the whole point of the negative region.
+    target_db = -24.0
+    outs = []
+    for partial_db in [-20.0, -16.0, -12.0]:
+        gain = _cell_gain_db(partial_db, target_db, 30.0, slope=-1.0)
+        outs.append(partial_db + gain)
+    assert all(o < target_db for o in outs)
+    assert outs == sorted(outs, reverse=True)   # louder in => quieter out
+
+
+def test_reduction_profile_never_boosts_at_any_slope_or_knee():
+    # Cells are cut-only whatever the profile is set to (ground-rules 6.3).
+    for slope in [1.0, 0.0, -1.0, -3.0]:
+        for knee in [0.0, 6.0, 24.0]:
+            for partial_db in np.linspace(-100.0, 20.0, 60):
+                assert _cell_gain_db(partial_db, -24.0, 30.0, slope, knee) <= 0.0
+
+
+def test_soft_knee_is_continuous_across_the_threshold():
+    # No step at either end of the knee region -- a discontinuity here is a click
+    # the feedback loop would then amplify (ground-rules 6.3).
+    target_db, knee = -24.0, 12.0
+    xs = np.linspace(target_db - knee, target_db + knee, 400)
+    gains = [_cell_gain_db(x, target_db, 30.0, slope=0.0, knee_db=knee) for x in xs]
+    steps = np.abs(np.diff(gains))
+    assert steps.max() < 0.2
+
+
+def test_more_negative_slope_never_widens_the_spread():
+    # The measured claim in render.cpp's REDUCTION PROFILE block, as a guard.
+    from harness.loop_sim import DEFAULT_PEAKED_MODES
+    spreads = []
+    for slope in [0.0, -0.5, -1.0]:
+        r = simulate(DEFAULT_PEAKED_MODES,
+                     ControllerConfig(master_boost_db=9.0, slope=slope))
+        spreads.append(r.spread_db)
+    assert all(s is not None for s in spreads)
+    assert spreads == sorted(spreads, reverse=True)

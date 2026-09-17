@@ -173,6 +173,10 @@ Watcher<float> gWatchLoopGain("loop_gain");
 // The 2026-09-14 "why do only 1-2 partials ever sustain" controls -- see the
 // MASTER UPWARD UNIT block and kProminenceDbStart below.
 Watcher<float> gWatchMasterBoostDb("master_boost_db");
+
+// Reduction profile, 2026-09-17 -- see the REDUCTION PROFILE block below.
+Watcher<float> gWatchSlope("reduction_slope");
+Watcher<float> gWatchKneeDb("knee_db");
 Watcher<float> gWatchProminenceDb("prominence_db");
 
 // Release-side anti-chatter, made live 2026-09-14 -- see kMinBoundHoldFrames.
@@ -376,6 +380,59 @@ static const float kCellQ = 10.0f;
 static const float kAttackMs = 3.0f;
 static const float kReleaseMs = 400.0f;
 static const float kMaxCutDb = 30.0f;
+// ------------------------------------------------ REDUCTION PROFILE
+// 2026-09-17, Abel: "controlling the reduction profile, probably tuning the
+// ratio much more aggressive".
+//
+// There was no ratio to tune. The law was cut = clamp(partialDb - targetDb, 0,
+// maxCut), i.e. a brick wall that pins the partial exactly AT the target --
+// already infinity:1, already the most aggressive setting a normal compressor
+// has. So the knob is added here in the one form that covers the whole useful
+// range monotonically, including the region past the brick wall:
+//
+//     cut = (1 - slope) * (partialDb - targetDb),  clamped to [0, maxCut]
+//
+// `slope` is dB of OUTPUT change per dB of INPUT change above the threshold
+// (which is the target):
+//
+//     slope = +1.0   ratio 1:1    -- no reduction at all, the cell is off
+//     slope =  0.0   ratio inf:1  -- brick wall, pinned AT the target. This is
+//                                    exactly the law this file had before, so
+//                                    0.0 changes nothing and is the default.
+//     slope <  0     OVER-compression -- the partial is pushed BELOW the target,
+//                                    and further below the louder it gets.
+//
+// WHAT IT ACTUALLY DOES, measured in host/harness/loop_sim.py over the peaked
+// six-mode plant, as sustained modes and the dB spread between the loudest and
+// quietest sustained one:
+//
+//     slope        master +0 dB     master +9 dB     master +18 dB
+//      0.00        1/6   n/a        5/6   7.9 dB     6/6  13.0 dB
+//     -0.50        1/6   n/a        5/6   5.3 dB     6/6   8.7 dB
+//     -1.00        1/6   n/a        5/6   4.0 dB     6/6   6.5 dB
+//     -2.00        1/6   n/a        5/6   2.6 dB     5/6   2.6 dB
+//
+// Read that carefully, because it refutes the obvious hypothesis. Over-
+// compression recruits NO additional modes -- at master +0 it is 1/6 at every
+// slope. The idea that cutting the winner harder hands gain back to the others
+// (ground-rules 5's shared saturation) does not survive contact with this
+// plant, and the real-rig measurements say the same thing: the 2026-09-13 takes
+// peak at 0.068 and 0.153 against a 0.5 ceiling, nowhere near the nonlinearity
+// that mechanism needs.
+//
+// What slope does instead is collapse the SPREAD -- 13 dB down to 6.5 dB at
+// master +18. That is the difference between one pitch with five whispers under
+// it and six pitches audible as a chord, which is the actual goal. So the
+// division of labour is: kMasterBoostDb recruits modes, slope equalises them.
+// Past about -2.0 it starts costing modes (6/6 -> 5/6), by suppressing one below
+// the level at which it can sustain at all.
+static const float kSlope = 0.0f;         // 0.0 == the pre-2026-09-17 brick wall
+static const float kSlopeMin = -3.0f, kSlopeMax = 1.0f;
+// Soft-knee width in dB, centred on the threshold. 0 is a hard knee, which is
+// what this file did before, so it is the default.
+static const float kKneeDb = 0.0f;
+static const float kKneeDbMin = 0.0f, kKneeDbMax = 24.0f;
+
 static const float kFreqLagS = 0.02f;
 static const float kMinCellFreqHz = 55.0f;
 static const float kMaxCellFreqHz = 2000.0f;
@@ -437,7 +494,16 @@ static const float kTargetDbMin = -48.0f, kTargetDbMax = -6.0f;
 static const float kMaxCutDbMin = 3.0f,   kMaxCutDbMax = 40.0f;
 static const float kReleaseMsMin = 50.0f, kReleaseMsMax = 3000.0f;
 static const float kCellQMin = 2.0f,      kCellQMax = 30.0f;
-static const float kMasterBoostDbMin = -12.0f, kMasterBoostDbMax = 18.0f;
+// Upper limit raised from +18 to +30 dB, 2026-09-17, Abel: "experimenting with
+// pushing the upward compression more hardly". Two things to know before living
+// up there. This sits AHEAD of the cells, so every dB of it is a dB a cell must
+// spend out of kMaxCutDb to hold a bound winner at the target -- run out and the
+// winner escapes the target upwards; raise max_cut_db alongside it. And a partial
+// NO cell has bound gets the full lift with nothing regulating it, so the higher
+// this goes the more the output leans on clampToCeiling(). That clamp is rule 1's
+// backstop and is unchanged, but a backstop doing musical work means this is set
+// too high.
+static const float kMasterBoostDbMin = -12.0f, kMasterBoostDbMax = 30.0f;
 static const float kProminenceDbMin = 3.0f, kProminenceDbMax = 30.0f;
 // Loop gain: a software multiplier on the cells' output, standing in for
 // walking back to the DTA120 knob for every experiment. Deliberately capped
@@ -912,6 +978,10 @@ bool setup(BelaContext *context, void *userData)
 	gWatchLoopGain.localControl(false);
 	gWatchMasterBoostDb = kMasterBoostDb;
 	gWatchMasterBoostDb.localControl(false);
+	gWatchSlope = kSlope;
+	gWatchSlope.localControl(false);
+	gWatchKneeDb = kKneeDb;
+	gWatchKneeDb.localControl(false);
 	gWatchProminenceDb = kProminenceDbStart;
 	gWatchProminenceDb.localControl(false);
 	gWatchMinHoldMs = 1000.0f * kMinBoundHoldFrames * (float)kHop / gSampleRate;
@@ -947,8 +1017,11 @@ bool setup(BelaContext *context, void *userData)
 	          "maxCut=%.1f dB  freqLag=%.0f ms\n",
 	          kTargetDb, kCellQ, kAttackMs, kReleaseMs, kMaxCutDb,
 	          1000.0f * kFreqLagS);
-	rt_printf("  master boost: %+.1f dB   prominence: %.1f dB\n",
+	rt_printf("  master boost: %+.1f dB (ahead of the cells)   prominence: %.1f dB\n",
 	          kMasterBoostDb, kProminenceDbStart);
+	rt_printf("  reduction profile: slope=%+.2f dB/dB knee=%.1f dB "
+	          "(slope 0 = brick wall at the target, <0 = over-compression)\n",
+	          kSlope, kKneeDb);
 	rt_printf("  recording: %s (in), %s (out)\n",
 	          kInputsFilename.c_str(), kOutputsFilename.c_str());
 	rt_printf("  bypass: %u (Watcher-settable; 1 = cells computed but not applied to "
@@ -989,6 +1062,9 @@ void render(BelaContext *context, void *userData)
 	const float cellQ = clampf(gWatchCellQ.get(), kCellQMin, kCellQMax);
 	const float loopGain = clampf(gWatchLoopGain.get(), kLoopGainMin, kLoopGainMax);
 	const float masterBoostDb = clampf(gWatchMasterBoostDb.get(), kMasterBoostDbMin, kMasterBoostDbMax);
+	const float slope = clampf(gWatchSlope.get(), kSlopeMin, kSlopeMax);
+	const float kneeDb = clampf(gWatchKneeDb.get(), kKneeDbMin, kKneeDbMax);
+	const float slopeK = 1.0f - slope;   // cut = slopeK * excess, see REDUCTION PROFILE
 	// The master upward unit -- applied to the input, AHEAD of the cells and of
 	// every detector, for the reason set out at kMasterBoostDb. Not folded into
 	// loopGain: that one is an output trim and stays where it is, after the cells.
@@ -1069,7 +1145,18 @@ void render(BelaContext *context, void *userData)
 			}
 			const float partialDb = 20.0f * log10f(std::max(envLin, 1e-9f));
 
-			const float cutDb = clampf(partialDb - targetDb, 0.0f, maxCutDb);
+			// Reduction profile -- see REDUCTION PROFILE in the constants. With
+			// slope 0 and knee 0 this is exactly clampf(partialDb - targetDb, 0,
+			// maxCutDb), the law this file carried before.
+			const float excessDb = partialDb - targetDb;
+			float rawCutDb;
+			if(kneeDb > 0.0f && excessDb > -0.5f * kneeDb && excessDb < 0.5f * kneeDb) {
+				const float t = excessDb + 0.5f * kneeDb;
+				rawCutDb = slopeK * t * t / (2.0f * kneeDb);
+			} else {
+				rawCutDb = slopeK * excessDb;
+			}
+			const float cutDb = clampf(rawCutDb, 0.0f, maxCutDb);
 			const float appliedCutDb = cutDb * gCellDuck[c];
 
 			gActuatorEq[c].setFc(freqNow);

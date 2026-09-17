@@ -180,17 +180,43 @@ def _clamp(x: float, lo: float, hi: float) -> float:
     return lo if x < lo else (hi if x > hi else x)
 
 
-def _cell_gain_db(partial_db: float, target_db: float, max_cut_db: float) -> float:
-    """render.cpp's cell law: cut a partial above target, do nothing to one below it.
+def _cell_gain_db(partial_db: float, target_db: float, max_cut_db: float,
+                   slope: float = 0.0, knee_db: float = 0.0) -> float:
+    """render.cpp's cell law, as a compressor reduction profile. Always <= 0 (cut only).
 
-    gain_db = -clamp(partial_db - target_db, 0, max_cut_db), i.e. always <= 0. This is a
-    faithful copy of render.cpp's
-        cutDb = clampf(partialDb - targetDb, 0.0f, maxCutDb)
-        gActuatorEq[c].setPeakGain(-appliedCutDb)
-    and deliberately has no boost branch -- a cell here can only ever attenuate, exactly
-    as ground-rules 6.3 specifies ("peaking-EQ biquad with negative gain").
+    `slope` is dB of OUTPUT change per dB of INPUT change above the threshold, which is
+    the target. It is the "ratio" knob in the one form that covers the whole useful range
+    in a single monotonic parameter:
+
+        slope = +1.0   ratio 1:1   -- no reduction at all, the cell is off
+        slope =  0.0   ratio inf:1 -- brick wall: the partial is pinned AT the target.
+                                      This is render.cpp's existing law exactly.
+        slope < 0      OVER-compression -- the partial is pushed BELOW the target, and
+                                      further below the louder it gets.
+
+    The negative region is the interesting one here and it is not a normal compressor
+    setting. At slope = 0 a runaway partial is held at unity loop gain: stable, but it
+    keeps all of the gain it took. At slope < 0 the harder it pushes the harder it is
+    cut, so its round-trip gain is driven BELOW unity and it actively gives gain back --
+    which, per ground-rules sec 5's shared-saturation argument, is gain the other modes
+    can then use. cut = (1 - slope) * (partial_db - target_db), clamped to [0, max_cut].
+
+    `knee_db` is the usual soft-knee width centred on the threshold; 0 is a hard knee,
+    which is what render.cpp does today.
     """
-    return -_clamp(partial_db - target_db, 0.0, max_cut_db)
+    excess = partial_db - target_db
+    k = 1.0 - slope
+    if knee_db > 0.0:
+        if excess <= -0.5 * knee_db:
+            cut = 0.0
+        elif excess < 0.5 * knee_db:
+            t = excess + 0.5 * knee_db
+            cut = k * t * t / (2.0 * knee_db)
+        else:
+            cut = k * excess
+    else:
+        cut = k * excess
+    return -_clamp(cut, 0.0, max_cut_db)
 
 
 # ------------------------------------------------------------------- plant
@@ -231,6 +257,9 @@ class ControllerConfig:
     # after them, so the cells regulate to a target the master then multiplies and
     # cannot see. See test_master_unit_ahead_of_the_cells_does_not_slam_the_ceiling.
     master_ahead_of_cells: bool = True
+    # Reduction profile. slope 0.0 / knee 0.0 is render.cpp's existing brick wall.
+    slope: float = 0.0
+    knee_db: float = 0.0
     attack_ms: float = ATTACK_MS
     release_ms: float = RELEASE_MS
     output_ceiling: float = OUTPUT_CEILING
@@ -257,6 +286,7 @@ class SimResult:
     ripple_db: float
     diverged: bool
     nonfinite: bool
+    slope: float = 0.0
 
     @property
     def n_sustained(self) -> int:
@@ -279,7 +309,7 @@ class SimResult:
 
     def describe(self) -> str:
         lines = [
-            f"master_boost_db={self.master_boost_db:+.1f}  "
+            f"master={self.master_boost_db:+.1f}dB slope={self.slope:+.2f}  "
             f"sustained={self.n_sustained}/{len(self.modes)}  "
             f"spread={'n/a' if self.spread_db is None else f'{self.spread_db:.1f} dB'}  "
             f"ceiling_hits={self.ceiling_hits} ({100.0 * self.ceiling_hit_fraction:.2f}%)  "
@@ -350,6 +380,8 @@ def simulate(modes: Sequence[Mode], ctrl: ControllerConfig, duration_s: float = 
     master_gain_lin = 10.0 ** (ctrl.master_boost_db / 20.0)
     master_ahead = ctrl.master_ahead_of_cells
     master_db_if_ahead = ctrl.master_boost_db if master_ahead else 0.0
+    slope = ctrl.slope
+    knee_db = ctrl.knee_db
     ceiling = ctrl.output_ceiling
 
     for n in range(n_samples):
@@ -393,7 +425,8 @@ def simulate(modes: Sequence[Mode], ctrl: ControllerConfig, duration_s: float = 
                 # boosted partial -- which is the whole point: the cell then cuts the
                 # boost back off anything it has bound, and the lift survives only on
                 # partials no cell is holding.
-                gain_db = _cell_gain_db(partial_db + master_db_if_ahead, target_db, max_cut_db)
+                gain_db = _cell_gain_db(partial_db + master_db_if_ahead, target_db,
+                                         max_cut_db, slope, knee_db)
                 actuator_gain_lin = 10.0 ** (gain_db / 20.0)
                 total_round_trip_gain = (g_lin[mi] * actuator_gain_lin * saturation_gain
                                           * master_gain_lin)
@@ -434,7 +467,8 @@ def simulate(modes: Sequence[Mode], ctrl: ControllerConfig, duration_s: float = 
     ripple_db = max(ripples) if ripples else 0.0
     diverged = saw_nonfinite or (ceiling_hits / n_samples > DIVERGENCE_CEILING_FRACTION)
 
-    return SimResult(master_boost_db=ctrl.master_boost_db, duration_s=duration_s,
+    return SimResult(master_boost_db=ctrl.master_boost_db, slope=ctrl.slope,
+                      duration_s=duration_s,
                       modes=outcomes, ceiling_hits=ceiling_hits, n_samples=n_samples,
                       settle_time_s=settle_time_s, ripple_db=ripple_db, diverged=diverged,
                       nonfinite=saw_nonfinite)

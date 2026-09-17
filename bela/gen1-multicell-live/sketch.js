@@ -103,10 +103,19 @@ function setup() {
 	const row1 = 150, row2 = 200, row3 = 250, colW = 210;
 	addSlider('target_db',       'target (dB)',       -48, -6,   0.5, 16,            row1);
 	addSlider('max_cut_db',      'max cut (dB)',        3, 40,   0.5, 16 + colW,     row1);
-	addSlider('master_boost_db', 'MASTER boost (dB)', -12, 18,   0.5, 16 + colW * 2, row1);
+	addSlider('master_boost_db', 'MASTER boost (dB)', -12, 30,   0.5, 16 + colW * 2, row1);
+	// The reduction profile (2026-09-17). slope is the "ratio" knob: +1 = cell
+	// off, 0 = brick wall pinned at the target (what this did before), negative =
+	// over-compression, pushed BELOW the target and further below the louder it
+	// gets. Measured in loop_sim.py: slope recruits no extra partials, but it
+	// collapses the spread between the ones you have -- 13 dB down to 6.5 dB --
+	// which is what makes several pitches read as a chord instead of one pitch
+	// with whispers under it. MASTER recruits, SLOPE evens out.
+	addSlider('reduction_slope', 'SLOPE (dB/dB)',      -3, 1,    0.05, 16 + colW * 3, row1);
 	addSlider('release_ms',      'release (ms)',       50, 3000, 10,  16,            row2);
 	addSlider('cell_q',          'Q',                   2, 30,   0.5, 16 + colW,     row2);
 	addSlider('prominence_db',   'prominence (dB)',     3, 30,   0.5, 16 + colW * 2, row2);
+	addSlider('knee_db',         'knee (dB)',           0, 24,   0.5, 16 + colW * 3, row2);
 	// Row 3: the release-side anti-chatter pair (see render.cpp's
 	// kMinBoundHoldFrames comment -- cells were letting go of their partial at the
 	// earliest frame the code allows, ~280 ms, over and over), then the output.
@@ -168,9 +177,12 @@ function draw() {
 		// changes how much energy the loop carries, and so the direct lever on how
 		// many partials sustain. Everything else decides what the cells see and
 		// how steadily they hold it.
-		const hot = (name === 'master_boost_db');
+		// The two controls that do the two different jobs: master recruits modes,
+		// slope decides whether they sit at comparable level.
+		const hot = (name === 'master_boost_db' || name === 'reduction_slope');
 		fill(hot ? color(235, 200, 110) : color(190));
-		const suffix = (name === 'loop_gain') ? num(name, 2) : num(name, 1);
+		const suffix = (name === 'loop_gain' || name === 'reduction_slope')
+			? num(name, 2) : num(name, 1);
 		text(c.label + (c.kind === 'slider' ? '  ' + suffix : ''), c.x, c.y + 10);
 	}
 
