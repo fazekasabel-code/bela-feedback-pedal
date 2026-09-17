@@ -59,12 +59,14 @@
  * audio-thread CPU monitoring (Bela_cpuMonitoringInit/Get) is wired in and
  * exposed over Watcher, rather than left unmeasured the way Phase 3 left it.
  *
- * SAFETY: kOutputCeiling and kWatchdogTimeoutS are safety constants in the
- * CLAUDE.md sense -- unchanged in meaning and value from gen1-cell /
- * gen1-passthrough / detector-passthrough. No automatic tuning process may
- * raise or extend them (ground rules 1, 3). Everything under "cell tuning
- * constants" and "allocator constants" below is a musical/DSP parameter, not
- * a safety constant.
+ * SAFETY: kOutputCeiling is a safety constant in the CLAUDE.md sense --
+ * unchanged in meaning and value from gen1-cell / gen1-passthrough /
+ * detector-passthrough. No automatic tuning process may raise it (rule 1).
+ * kWatchdogTimeoutS is DISABLED in this project as of 2026-09-17 on Abel's
+ * explicit instruction -- see that constant for the reasoning and for what
+ * carries the load instead. Everything under "cell tuning constants" and
+ * "allocator constants" below is a musical/DSP parameter, not a safety
+ * constant.
  *
  * RUN HISTORY: see bela/gen1-multicell/render.cpp's own header and
  * phase-plan.md's Status block for the real-loop takes, the sweep-kick A/B,
@@ -108,8 +110,9 @@
  *      what the cells can SEE and how steadily they hold it. Its placement ahead
  *      of the cells rather than after them is measured, not incidental -- see
  *      that constant.
- * The safety net is untouched by all of it: kOutputCeiling, kWatchdogTimeoutS,
- * the non-finite mute and the fade-in are exactly as they were (rules 1, 3, 4).
+ * The safety net is untouched by all of it: kOutputCeiling, the non-finite mute
+ * and the fade-in are exactly as they were (rules 1, 4). The watchdog is a
+ * separate, later, deliberate change -- see kWatchdogTimeoutS.
  *
  * THE GUI: Bela's own Watcher/Gui plumbing (`getGui().setup()` below) is
  * already wired into every project in this repo -- opening this project in
@@ -197,10 +200,49 @@ static std::vector<Watcher<float>>        gWatchCellCutDb;
 
 // ---------------------------------------------------------------- constants
 
-// Safety constants -- see header comment. Identical meaning and value to
-// gen1-cell / gen1-passthrough / detector-passthrough.
+// Safety constants -- see header comment. kOutputCeiling and kFadeInS are
+// identical in meaning and value to gen1-cell / gen1-passthrough /
+// detector-passthrough. kWatchdogTimeoutS is NOT -- see below.
 static const float kOutputCeiling = 0.5f;
-static const float kWatchdogTimeoutS = 120.0f;
+
+// WATCHDOG DISABLED IN THIS PROJECT, 2026-09-17, Abel's explicit instruction.
+// 0 = no time box. Any positive value re-arms it, and the mechanism below is
+// untouched, so re-enabling is a one-line change to this constant.
+//
+// This is a change to a named hard rule, not a tuning tweak, so the reasoning is
+// recorded here as well as in CLAUDE.md rule 3 and ground-rules 10.1.
+//
+// WHY. 120 s was sized for a real-loop SMOKE TEST -- the first time the exciter
+// was driven at all (phase-plan.md's Phase 1 entry: "ran clean for ~13 s ...
+// watchdog armed but not tripped"). It is the wrong instrument for a playing
+// session: nobody plays a guitar in under two minutes, so the time box stopped
+// being a backstop and became the thing that ends the take. A safety device that
+// fires on every single normal use is not being relied on, it is being worked
+// around, and that is worse than not having it.
+//
+// WHAT IS NOW CARRYING THE LOAD. CLAUDE.md rule 6 names rules 1, 3 and 4 as the
+// safety net that stands in for this build having no hardware kill switch. With
+// 3 gone for this project, that is:
+//   - rule 1, the output ceiling: kOutputCeiling, unchanged, unconditional, on
+//     every sample, not reachable from the GUI.
+//   - rule 4, mute on anything non-finite: unchanged, latching, no recovery.
+//   - rule 2, Abel present for every real-loop run: unchanged, and now doing
+//     strictly more work than it was. This is the one that replaces the time box.
+//   - the DTA120's own power switch, which ground-rules 4.5 already records as a
+//     trivial, always-reachable manual backstop (Abel, 2026-09-11).
+//
+// WHAT IS ACTUALLY LOST. The time box was the only thing that would have stopped
+// a run nobody was watching. Rule 2 already forbids unattended runs on this rig
+// and rig-profile.json still records unattended_runs_permitted: false, so in
+// principle it protected against a case that is already prohibited -- but in
+// practice it protected against Abel walking away, getting distracted, or losing
+// the SSH session with the project still running. That protection is gone. It
+// does not come back by being careful; it comes back by setting this constant.
+//
+// SCOPE. Only this project. Every other sketch in bela/ still carries the 120 s
+// box, deliberately: they are test harnesses driven by timed runs, where the box
+// costs nothing and the runs are short by construction.
+static const float kWatchdogTimeoutS = 0.0f;
 static const float kFadeInS = 0.2f;
 
 static const unsigned int kGuitarInputChannel = 0;
@@ -489,7 +531,9 @@ static const float kMasterBoostDb = 0.0f;
 // what the browser sends -- defense in depth, not just trusting the slider's
 // own min/max. None of these touch kOutputCeiling (the actual rule-1 safety
 // ceiling) or kWatchdogTimeoutS -- those stay fixed constants, full stop, not
-// reachable from the GUI at all.
+// reachable from the GUI at all. (The watchdog is disabled in this project as of
+// 2026-09-17, but by editing that constant and rebuilding, which is exactly the
+// "explicit human commit" route -- never from a slider.)
 static const float kTargetDbMin = -48.0f, kTargetDbMax = -6.0f;
 static const float kMaxCutDbMin = 3.0f,   kMaxCutDbMax = 40.0f;
 static const float kReleaseMsMin = 50.0f, kReleaseMsMax = 3000.0f;
@@ -1006,8 +1050,15 @@ bool setup(BelaContext *context, void *userData)
 	rt_printf("  audio  : %u in / %u out @ %.1f Hz, block %u\n",
 	          context->audioInChannels, context->audioOutChannels,
 	          context->audioSampleRate, context->audioFrames);
-	rt_printf("  ceiling: %.3f linear   watchdog: %.0f s   fade-in: %.2f s\n",
-	          kOutputCeiling, kWatchdogTimeoutS, kFadeInS);
+	if(kWatchdogTimeoutS > 0.0f) {
+		rt_printf("  ceiling: %.3f linear   watchdog: %.0f s   fade-in: %.2f s\n",
+		          kOutputCeiling, kWatchdogTimeoutS, kFadeInS);
+	} else {
+		rt_printf("  ceiling: %.3f linear   watchdog: DISABLED   fade-in: %.2f s\n",
+		          kOutputCeiling, kFadeInS);
+		rt_printf("  *** no time box: this run does not stop on its own. Abel present "
+		          "(rule 2) and the DTA120 power switch are the backstop. ***\n");
+	}
 	rt_printf("  analysis: window=%d hop=%d (%.1f ms, %.2f Hz/bin), band %.0f-%.0f Hz "
 	          "(bins %d-%d), bind-by-magnitude, steal-least-active when full\n",
 	          kFftWindow, kHop, 1000.0f * kHop / context->audioSampleRate,
@@ -1036,7 +1087,9 @@ void render(BelaContext *context, void *userData)
 {
 	const float elapsedS = (float)gFrameCount / context->audioSampleRate;
 
-	if(!gMuted && elapsedS >= kWatchdogTimeoutS) {
+	// kWatchdogTimeoutS = 0 disables the time box entirely -- see that constant.
+	// The mechanism stays exactly as it was so any positive value re-arms it.
+	if(kWatchdogTimeoutS > 0.0f && !gMuted && elapsedS >= kWatchdogTimeoutS) {
 		gMuted = true;
 		rt_printf("watchdog timeout at %.1f s — output muted\n", elapsedS);
 	}

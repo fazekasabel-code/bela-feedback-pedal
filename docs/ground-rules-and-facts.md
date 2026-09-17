@@ -236,9 +236,11 @@ foot control of loop gain per §8) and would then resume the role.
 
 **This does not touch what was never optional:**
 
-- **Software kill, unchanged:** a hard output ceiling in the DSP that no automatic tuning
+- **Software kill:** a hard output ceiling in the DSP that no automatic tuning
   may raise, and a mute-on-error path (any xrun, NaN, denormal storm, or watchdog timeout ⇒
-  output muted). See ground rules §10.2–10.4.
+  output muted). See ground rules §10.2–10.4. The ceiling and the error path are unchanged;
+  the watchdog leg of this is suspended for `gen1-multicell-live` as of 2026-09-17 — see
+  §10.1's second item for what that costs and what replaces it.
 - Every session starts with the DSP output ramped up from silence, never resumed at the
   previous session's level. Loop gain itself is presently whatever the DTA120's gain control
   is set to — fixed once chosen, never touched mid-session (ground rule 10.5).
@@ -455,6 +457,10 @@ Computed over a rolling window of the feedback output:
 
 1. Real-loop tests run **only when Abel has confirmed the rig is live and he is present**. This build has no dedicated hardware kill switch to name before running — see §4.5 for why, and for what presence means here instead.
 2. Every real-loop test run is time-boxed by a watchdog in the DSP: no run exceeds N seconds without a fresh heartbeat from the host, then output mutes.
+   - **Suspended for `bela/gen1-multicell-live/` only, 2026-09-17, on Abel's explicit instruction** (`kWatchdogTimeoutS = 0`; every other sketch in `bela/` keeps the 120 s box). 120 s was sized for the first real-loop smoke test — phase-plan Phase 1's "ran clean for ~13 s … watchdog armed but not tripped" — and nobody plays a guitar in under two minutes, so in a playing session it fired every single time. A safety device that trips on every normal use is not being relied on, it is being worked around.
+   - **What carries the load now.** §4.5 names rules 1, 3 and 4 as the net that stands in for this build having no hardware kill switch. With 3 suspended here, that is: the output ceiling (rule 1, unchanged, unconditional, every sample, not reachable from the GUI); mute on anything non-finite (rule 4, unchanged, latching, no recovery); **rule 2, Abel present, which is now load-bearing in a way it was not before**; and the DTA120's own power switch, already recorded in §4.5 as a trivial always-reachable manual backstop.
+   - **What is actually lost, stated plainly.** The time box was the only thing that would have stopped a run nobody was watching. Rule 2 already forbids unattended runs and `rig-profile.json` still records `unattended_runs_permitted: false`, so on paper it guarded a case that is already prohibited — but in practice it guarded against Abel walking away, being distracted, or losing the SSH session with the project still running. That is gone, and being careful does not bring it back; setting the constant does.
+   - This is a change to a rule listed under "hard rules, no exceptions", made by the person those rules belong to. It is recorded here rather than made silently, and it is reversible in one line.
 3. There is a hard output ceiling in code. **No automatic tuning process may raise it.** It changes only by an explicit human commit.
 4. Any xrun, NaN, denormal storm, or lost connection ⇒ mute output, do not "try to recover."
 5. The power amp gain and the exciter mounting are fixed constants of the rig profile. The agent never asks Abel to change them mid-session in order to make a test pass.

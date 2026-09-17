@@ -77,6 +77,7 @@
     "designated_hardware_kill": "none required -- DTA120 power switch available as a manual backstop (Abel, 2026-09-11)",
     "_kill_note": "Deliberate, not missing: Bela audio out feeds the Dayton DTA120 straight into the exciter, no pedal or other device in between. Ground rule (Abel, 2026-09-11): no dedicated hardware kill is required in this build, because there is no second, uncontrolled acoustic loop (nothing feeds a live guitar amp or PA) and the DTA120+exciter's worst case even at full runaway is judged safe. The DTA120's own power switch is a trivial, always-available manual backstop -- not a required interlock, just there. Software kill (output ceiling, mute-on-error, watchdog) stays mandatory regardless. If a hardware kill is ever added back (e.g. a volume pedal), record it here and it becomes required again.",
     "watchdog_timeout_s": 120,
+    "_watchdog_note": "Still 120 s in every bela/ sketch EXCEPT gen1-multicell-live, where it is disabled (kWatchdogTimeoutS = 0) as of 2026-09-17 on Abel's explicit instruction -- see CLAUDE.md rule 3 and ground-rules 10.1 for the reasoning, what carries the load instead, and what is lost. unattended_runs_permitted below is unchanged and still false.",
     "unattended_runs_permitted": false,
     "_unattended_note": "Not granted yet on this rig. Requires Abel to explicitly confirm the rig connected and permit unattended operation, per ground rule 2."
   },

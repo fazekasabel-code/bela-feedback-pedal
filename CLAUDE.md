@@ -41,6 +41,16 @@ constraint in it, change the doc in the same commit and say so.
    here instead. Unattended runs are not permitted until Abel explicitly grants that on this
    rig, once it is built and he has confirmed it connected.
 3. Real-loop runs are watchdogged: no run continues past its time box. On timeout, mute.
+   **Suspended for `bela/gen1-multicell-live/` only, 2026-09-17, by Abel's explicit
+   instruction** (`kWatchdogTimeoutS = 0`). The 120 s box was sized for the first
+   real-loop smoke test and fires during every normal playing session, so it had stopped
+   being a backstop and become the thing that ends the take. Every other sketch in
+   `bela/` still carries it. What now covers the gap: rule 2 (Abel present) is doing
+   strictly more work than before, plus rules 1 and 4 unchanged and the DTA120 power
+   switch. **What is genuinely lost:** the time box was the only thing that would have
+   stopped a run nobody was watching — Abel walking away, getting distracted, or losing
+   the SSH session with the project still live. Re-arming it is one constant and a
+   rebuild. See ground-rules §10.1 and that constant's own comment.
 4. Any xrun, NaN, denormal storm or lost connection ⇒ mute the output. Do not attempt
    to recover and keep running.
 5. Power amp gain and exciter mounting position are fixed constants of the rig profile.
@@ -66,7 +76,9 @@ constraint in it, change the doc in the same commit and say so.
    dead during development, rule 2 applies in its strict form, and rule 6's reasoning no
    longer holds until a hardware kill is reintroduced.
 9. Safety-critical code — the output ceiling, the watchdog, the mute paths — is written
-   here, not delegated to Cursor.
+   here, not delegated to Cursor. That includes disabling any of them: rule 3's
+   suspension above was made in code and documented in the same commit, not toggled from
+   a GUI. None of these are reachable from a slider, and none may become so.
 
 ## Process
 
