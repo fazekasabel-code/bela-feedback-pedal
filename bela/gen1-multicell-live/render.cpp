@@ -457,6 +457,18 @@ static const float kReleaseFloorDbfs = -72.0f;
 // the measured thrashing this exists to stop. 0 reproduces the old unconditional
 // behaviour, matching multicell_sandbox.py's STEAL_MARGIN_DB.
 static const float kStealMarginDb = 6.0f;
+// Two cells count as equally inactive if their cuts are within this of each
+// other, 2026-09-17. "Least active" was a strict minimum over gCellCutDbLast,
+// which is fine when the cuts differ but useless when several cells sit at
+// exactly 0.0 dB -- a normal state, since a cell bound to a partial below the
+// target cuts nothing. The strict `<` then made the winner whichever of them had
+// the lowest INDEX, which is arbitrary: it may pick a cell sitting on a partial
+// near the target over one sitting on a much quieter partial. That matters twice
+// over, because the steal margin is measured against whichever cell is picked --
+// so an arbitrary choice also sets an arbitrarily high bar for the challenger.
+// Within the tie band, prefer the quietest partial: it is the least valuable slot
+// AND the lowest bar. See the two-pass selection in analyseFrame().
+static const float kStealCutTieDb = 0.5f;
 static const int   kLockoutFrames = 20;          // ground-rules 6.2's "short lockout
                                                   // before the same frequency region can
                                                   // be re-allocated", ~116 ms.
@@ -1046,12 +1058,24 @@ void analyseFrame(void*)
 	while(nextCandidate < candidates.size() && isBinOccupied(candidates[nextCandidate].bin))
 		nextCandidate++;   // same re-test as the bind loop, for the steal challenger
 	if(nextCandidate < candidates.size()) {
+		// Two passes, because "least active" has to cope with ties -- see
+		// kStealCutTieDb. Pass 1 finds the smallest current cut; pass 2 picks,
+		// among every cell within kStealCutTieDb of it, the one whose partial is
+		// quietest. With cuts that genuinely differ this is identical to the old
+		// strict minimum; with several cells at 0.0 dB it replaces an index-order
+		// accident with the actual least-valuable slot.
 		int stealTarget = -1;
 		float lowestCutDb = 1e9f;
 		for(int c = 0; c < kNumCells; c++) {
 			if(gCellState[c] != kBound || gBoundFrames[c] <= minHoldFrames) continue;
-			if(gCellCutDbLast[c] < lowestCutDb) {
-				lowestCutDb = gCellCutDbLast[c];
+			if(gCellCutDbLast[c] < lowestCutDb) lowestCutDb = gCellCutDbLast[c];
+		}
+		float lowestMagDb = 1e9f;
+		for(int c = 0; c < kNumCells; c++) {
+			if(gCellState[c] != kBound || gBoundFrames[c] <= minHoldFrames) continue;
+			if(gCellCutDbLast[c] > lowestCutDb + kStealCutTieDb) continue;
+			if(magDb[gBoundBin[c]] < lowestMagDb) {
+				lowestMagDb = magDb[gBoundBin[c]];
 				stealTarget = c;
 			}
 		}
