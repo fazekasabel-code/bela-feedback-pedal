@@ -886,6 +886,54 @@ void analyseFrame(void*)
 		}
 	}
 
+	// ---- collision resolution: two bound cells on the same partial -------
+	// 2026-09-17, observed live: cells 0 and 11 both sat on 80 Hz (cut 10.9 /
+	// 10.8 dB) and cells 6 and 9 both on 734 Hz (cut 3.5 / 3.5, level identical
+	// to the decimal). kExclusionCents was enforced in exactly ONE place --
+	// isBinOccupied() at candidate-gather time -- which covers binding and
+	// nothing else. The glide above has no occupancy check at all: it walks a
+	// cell to whichever bin in +-kGlideCents is loudest, so once the low E
+	// became the loudest thing in the spectrum (which is what the detector-floor
+	// fix earlier today accomplished), any cell that drifted within glide range
+	// of it climbed that slope and collided with the cell already there. A
+	// sidelobe of a strong partial is enough to start the walk: it binds outside
+	// the keep-out radius, then glides uphill into the peak over a few frames.
+	//
+	// This is not just a wasted cell. Every cell detects from `src` -- the raw,
+	// pre-cell input -- so two cells on one partial each compute the FULL
+	// correction and both apply it. The partial gets cut twice, the control
+	// loop's gain is doubled, and the partial is driven well below the target.
+	// On the flattening goal that is backwards: the doubled partial ends up too
+	// quiet, and the cell that should have been regulating some other partial is
+	// not regulating anything.
+	//
+	// The newcomer gives way, not the least-active one. The steal rule uses
+	// least-active (ground-rules 6.2), but for a collision the two cuts are
+	// near-identical by construction -- they are measuring the same partial --
+	// so that tiebreak is arbitrary and would flip frame to frame. Bound-age is
+	// decisive and stable: the incumbent has been regulating this partial, the
+	// one that glided in is the intruder. Freeing it costs nothing audible --
+	// a freed cell runs the ordinary envelope release, so its cut decays over
+	// release_ms rather than jumping -- and the bind loop below can hand it a
+	// real partial in this same frame.
+	for(int a = 0; a < kNumCells; a++) {
+		if(gCellState[a] != kBound) continue;
+		for(int b = a + 1; b < kNumCells; b++) {
+			if(gCellState[b] != kBound) continue;
+			// Symmetric radius so the outcome cannot depend on loop order.
+			const int radius = std::max(centsToBins(gBoundBin[a], kExclusionCents, kExclusionBinRadiusMin),
+			                            centsToBins(gBoundBin[b], kExclusionCents, kExclusionBinRadiusMin));
+			if(std::abs(gBoundBin[a] - gBoundBin[b]) > radius) continue;
+			const int loser = (gBoundFrames[a] < gBoundFrames[b]) ? a : b;
+			gCellState[loser] = kFree;
+			gLockoutBin[loser] = gBoundBin[loser];
+			gLockoutFrames[loser] = kLockoutFrames;
+			gBoundBin[loser] = -1;
+			gReleaseEventsTotal++;
+			if(loser == a) break;   // `a` is free now; nothing left to compare it against
+		}
+	}
+
 	// ---- gather candidates: stable, prominent, above the floor, not ------
 	// ---- already occupied by a bound or lockout-held cell ----------------
 	struct Candidate { int bin; float magDb; };
@@ -905,6 +953,16 @@ void analyseFrame(void*)
 	size_t nextCandidate = 0;
 	for(int c = 0; c < kNumCells && nextCandidate < candidates.size(); c++) {
 		if(gCellState[c] != kFree) continue;
+		// The candidate list was filtered against occupancy ONCE, at gather time,
+		// and its entries are not mutually exclusive with each other: two peaks
+		// within kExclusionCents can both be in it, and before 2026-09-17 both
+		// would bind, putting two cells on one partial in a single frame. Re-test
+		// here -- isBinOccupied() reads gCellState/gBoundBin, which the iterations
+		// above have already updated, so this sees cells bound earlier in this very
+		// loop. Same guard, applied at the moment it actually decides something.
+		while(nextCandidate < candidates.size() && isBinOccupied(candidates[nextCandidate].bin))
+			nextCandidate++;
+		if(nextCandidate >= candidates.size()) break;
 		const Candidate& cand = candidates[nextCandidate++];
 		gCellState[c] = kBound;
 		gBoundBin[c] = cand.bin;
@@ -920,6 +978,8 @@ void analyseFrame(void*)
 	// Ground-rules 6.2: steal the cell whose partial is LEAST ACTIVE (lowest
 	// current gain reduction), not the oldest. Only cells past their own
 	// anti-chatter min-hold are eligible, same guard release uses.
+	while(nextCandidate < candidates.size() && isBinOccupied(candidates[nextCandidate].bin))
+		nextCandidate++;   // same re-test as the bind loop, for the steal challenger
 	if(nextCandidate < candidates.size()) {
 		int stealTarget = -1;
 		float lowestCutDb = 1e9f;
