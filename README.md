@@ -17,7 +17,7 @@ sequence of work.
 
 ## Status
 
-**On the Bela Gem Stereo, arrived 2026-09-10. Phase 4 passed 2026-09-13; Phase 5 built, awaiting its real-loop session.** Signal
+**On the Bela Gem Stereo, arrived 2026-09-10. Phase 4 passed 2026-09-13; Phase 5 built and through its first live tuning sessions, 2026-09-17 — Abel's verdict: "behaves fairly well."** Signal
 chain as wired: Epiphone (humbucker) → Bela in **directly, unbuffered** (mono guitar,
 **confirmed on channel 0/left** by direct measurement); Bela out ch1 → power amp (Dayton
 DTA120) → exciter (Dayton), straight through, no pedal in between — see ground-rules §4.5 for
@@ -40,8 +40,26 @@ a same-code engaged/disengaged A/B (a sweep-kick seeds the loop with no playing 
 a clean positive result: **engaged locks onto a stable 4-partial texture for 30+s; disengaged
 decays back to winner-takes-all.** An offline sandbox validated the actuator/allocator math
 against synthetic tones and surfaced one open tuning question (a bin-exclusion radius that may
-be too wide for closely-spaced guitar partials). See
-`docs/phase-plan.md`'s Status block for the full handover.
+be too wide for closely-spaced guitar partials) — **since closed, see below.**
+
+**Phase 5's first live tuning sessions, 2026-09-17.** Five fixes, each surfaced by playing
+rather than by analysis, all in `bela/gen1-multicell-live/`. The reported symptom — "usually
+the low E string vibrating extremely and the rest are quiet" — turned out to be a **detector
+bug**: a change on 09-14 claimed a 43 Hz detection floor but shipped 86.1 Hz, and the low E
+fundamental (82.41 Hz) is the only standard-tuning string fundamental below that line, so it
+alone could never bind a cell and ran away unregulated while every other string was held at
+target. Then, visible only once that was fixed: **two cells doubling on one partial** (the
+keep-out radius was enforced at bind time and nowhere else, so a cell could glide into an
+occupied peak — and since every cell detects from the raw pre-cell input, both then applied
+the *full* correction); **a click on rebind under load** (the rebind duck ramped in over 50 ms
+but went out in a single sample, a gain step the size of whatever cut the cell was holding);
+**the envelope attack**, reclassified from a fixed safety margin to a bounded live control and
+set to 300 ms by ear — at 3 ms it tracked each pluck's transient and flattened the attack of
+every note, and a slow attack is the correct discriminator between fast plucks and slow
+feedback growth; and the **keep-out radius 110 → 50 cents**, making it exactly the glide
+window as ground-rules §6.2/§7 already define that boundary — **this is the bin-exclusion
+question above, now closed.** See `docs/phase-plan.md`'s Status block for the full handover,
+including what was deliberately left undone.
 
 | Piece | State |
 |---|---|
@@ -50,7 +68,7 @@ be too wide for closely-spaced guitar partials). See
 | `sc/gen1_cell.scd` | One adaptive cell, passed the "second partial blooms" test **on the old Mac rig** — ported to Bela C++ below |
 | `bela/gen1-cell/` | Phase 4 port of the one-cell regulator. **Passed its real-loop test 2026-09-13** (DTA120=100%, Abel present) — see `logs/2026-09-13/185836_first-cell-take-dta120-100pct.json` |
 | `bela/gen1-multicell/` | Phase 5: N=12 allocator (bumped from 4) generalising `gen1-cell`, with a click-safe steal (a "rebind duck" ramps cut to 0 and back on every fresh bind/steal). **Sweep-kick A/B shows a clean pass** (4-partial texture sustained 30+s, engaged vs. disengaged decaying back to single-partial) — a live-playing take reproducing that is still open |
-| `bela/gen1-multicell-live/` | Same N=12/duck-safe allocator, sweep-kick removed for live playing. Custom browser view (`sketch.js`): a 12-cell grid plus **five live tuning sliders** (target level, max cut, release, Q, loop gain) and a bypass checkbox, confirmed working end to end. `host/rig/multicell_monitor.py` is a terminal fallback if the browser view ever flakes |
+| `bela/gen1-multicell-live/` | Same N=12/duck-safe allocator, sweep-kick removed for live playing. Custom browser view (`sketch.js`): a 12-cell grid plus **thirteen live tuning sliders** and a bypass checkbox, confirmed working end to end. **The live-playing sketch** — through its first tuning sessions 2026-09-17 (detector floor, one-cell-per-partial enforcement, click-free rebind, 300 ms attack, 50-cent keep-out; see Status above). `host/rig/multicell_monitor.py` is a terminal fallback if the browser view ever flakes |
 | `host/rig/snapshot_partials.py`, `host/harness/multicell_sandbox.py` | Time-windowed re-scoring of a take, and an offline synthetic-tone allocator/actuator check — both built 2026-09-13 to diagnose gen1-multicell |
 | `bela/detector-passthrough/` | Growth-rate detector, running on hardware, but its arm threshold is known miscalibrated for realistic near-unity jumps — flagged, not yet fixed |
 | `bela/latency-check/`, `host/rig/analyse_latency.py` | Whole-loop round-trip latency via a burst through the exciter + cross-correlation |
